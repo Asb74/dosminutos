@@ -16,6 +16,8 @@ class HomeScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
+
     return Scaffold(
       appBar: AppBar(
         title: const Text('Dos Minutos'),
@@ -27,61 +29,92 @@ class HomeScreen extends StatelessWidget {
           ),
         ],
       ),
-      body: Center(
-        child: Padding(
-          padding: const EdgeInsets.all(24),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              _HomeButton(
-                label: 'Nuevo partido',
-                icon: Icons.sports_handball,
-                onPressed: () => _navigateTo(context, '/nuevoPartido'),
-              ),
-              const SizedBox(height: 16),
-              _HomeButton(
-                label: 'Historial de partidos',
-                icon: Icons.history,
-                onPressed: () => _navigateTo(context, '/historial'),
-              ),
-              const SizedBox(height: 16),
-              _HomeButton(
-                label: 'Maestros',
-                icon: Icons.settings,
-                onPressed: () => _navigateTo(context, '/maestros'),
-              ),
-            ],
-          ),
+      body: Padding(
+        padding: const EdgeInsets.all(16),
+        child: GridView.count(
+          crossAxisCount: 2,
+          crossAxisSpacing: 16,
+          mainAxisSpacing: 16,
+          children: [
+            _HomeCard(
+              title: 'Nuevo partido',
+              subtitle: 'Configura un partido nuevo.',
+              icon: Icons.sports_handball,
+              colorScheme: colorScheme,
+              onTap: () => _navigateTo(context, '/nuevoPartido'),
+            ),
+            _HomeCard(
+              title: 'Historial',
+              subtitle: 'Consulta partidos previos.',
+              icon: Icons.history,
+              colorScheme: colorScheme,
+              onTap: () => _navigateTo(context, '/historial'),
+            ),
+            _HomeCard(
+              title: 'Maestros',
+              subtitle: 'Gestiona catálogos y datos base.',
+              icon: Icons.settings,
+              colorScheme: colorScheme,
+              onTap: () => _navigateTo(context, '/maestros'),
+            ),
+          ],
         ),
       ),
     );
   }
 }
 
-class _HomeButton extends StatelessWidget {
-  const _HomeButton({
-    required this.label,
+class _HomeCard extends StatelessWidget {
+  const _HomeCard({
+    required this.title,
+    required this.subtitle,
     required this.icon,
-    required this.onPressed,
+    required this.colorScheme,
+    required this.onTap,
   });
 
-  final String label;
+  final String title;
+  final String subtitle;
   final IconData icon;
-  final VoidCallback onPressed;
+  final ColorScheme colorScheme;
+  final VoidCallback onTap;
 
   @override
   Widget build(BuildContext context) {
-    return SizedBox(
-      width: double.infinity,
-      child: ElevatedButton.icon(
-        onPressed: onPressed,
-        icon: Icon(icon),
-        label: Padding(
-          padding: const EdgeInsets.symmetric(vertical: 12),
-          child: Text(
-            label,
-            style: const TextStyle(fontSize: 16),
-          ),
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(24),
+      child: Ink(
+        decoration: BoxDecoration(
+          color: colorScheme.primary.withOpacity(0.18),
+          borderRadius: BorderRadius.circular(24),
+        ),
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            CircleAvatar(
+              backgroundColor: colorScheme.primary,
+              foregroundColor: colorScheme.onPrimary,
+              child: Icon(icon),
+            ),
+            const SizedBox(height: 12),
+            Text(
+              title,
+              style: const TextStyle(
+                fontSize: 18,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+            const SizedBox(height: 4),
+            Text(
+              subtitle,
+              style: TextStyle(
+                color: colorScheme.onSurface.withOpacity(0.75),
+              ),
+            ),
+          ],
         ),
       ),
     );

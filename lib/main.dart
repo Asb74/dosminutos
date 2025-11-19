@@ -9,6 +9,7 @@ import 'screens/login_screen.dart';
 import 'screens/maestros_screen.dart';
 import 'screens/nuevo_partido_screen.dart';
 import 'screens/splash_screen.dart';
+import 'screens/equipos_screen.dart';
 
 const primaryYellow = Color(0xFFFFC727);
 const black = Colors.black;
@@ -67,6 +68,7 @@ class DosMinutosApp extends StatelessWidget {
         '/home': (context) => const HomeScreen(),
         '/nuevoPartido': (context) => const NuevoPartidoScreen(),
         '/historial': (context) => const HistorialPartidosScreen(),
+        '/equipos': (context) => const EquiposScreen(),
         '/maestros': (context) => const MaestrosScreen(),
       },
     );
