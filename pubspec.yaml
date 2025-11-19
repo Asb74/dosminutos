@@ -73,7 +73,6 @@ flutter:
   uses-material-design: true
 
   assets:
-    - assets/logo_dosminutos.png
     - assets/icon/logo_dosminutos.png
 
   # An image asset can refer to one or more resolution-specific "variants", see
