@@ -3,9 +3,15 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 
 import 'firebase_options.dart';
+import 'screens/historial_partidos_screen.dart';
 import 'screens/home_screen.dart';
 import 'screens/login_screen.dart';
+import 'screens/maestros_screen.dart';
+import 'screens/nuevo_partido_screen.dart';
 import 'screens/splash_screen.dart';
+
+const primaryYellow = Color(0xFFFFC727);
+const black = Colors.black;
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -20,10 +26,35 @@ class DosMinutosApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final colorScheme = ColorScheme.fromSeed(
+      seedColor: primaryYellow,
+      brightness: Brightness.light,
+    ).copyWith(
+      primary: primaryYellow,
+      onPrimary: black,
+      secondary: black,
+      onSecondary: Colors.white,
+    );
+
     final baseTheme = ThemeData(
       useMaterial3: true,
-      colorSchemeSeed: Colors.deepPurple,
+      colorScheme: colorScheme,
+      scaffoldBackgroundColor: const Color(0xFFFFF7D1),
       textTheme: GoogleFonts.interTextTheme(),
+      appBarTheme: const AppBarTheme(
+        backgroundColor: primaryYellow,
+        foregroundColor: black,
+        centerTitle: true,
+      ),
+      elevatedButtonTheme: ElevatedButtonThemeData(
+        style: ElevatedButton.styleFrom(
+          backgroundColor: primaryYellow,
+          foregroundColor: black,
+          shape: const StadiumBorder(),
+          padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 14),
+          textStyle: const TextStyle(fontWeight: FontWeight.bold),
+        ),
+      ),
     );
 
     return MaterialApp(
@@ -34,6 +65,9 @@ class DosMinutosApp extends StatelessWidget {
         '/splash': (context) => const SplashScreen(),
         '/login': (context) => const LoginScreen(),
         '/home': (context) => const HomeScreen(),
+        '/nuevoPartido': (context) => const NuevoPartidoScreen(),
+        '/historial': (context) => const HistorialPartidosScreen(),
+        '/maestros': (context) => const MaestrosScreen(),
       },
     );
   }
