@@ -51,6 +51,13 @@ class HomeScreen extends StatelessWidget {
               onTap: () => _navigateTo(context, '/historial'),
             ),
             _HomeCard(
+              title: 'Partidos',
+              subtitle: 'Ver y continuar partidos.',
+              icon: Icons.sports,
+              colorScheme: colorScheme,
+              onTap: () => _navigateTo(context, '/partidos'),
+            ),
+            _HomeCard(
               title: 'Maestros',
               subtitle: 'Gestiona catálogos y datos base.',
               icon: Icons.settings,
