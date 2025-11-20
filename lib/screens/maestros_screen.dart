@@ -1,5 +1,10 @@
 import 'package:flutter/material.dart';
 
+import 'arbitros_screen.dart';
+import 'equipos_screen.dart';
+import 'jugadores_equipos_screen.dart';
+import 'temporadas_screen.dart';
+
 class MaestrosScreen extends StatelessWidget {
   const MaestrosScreen({super.key});
 
@@ -27,17 +32,29 @@ class MaestrosScreen extends StatelessWidget {
             ),
             _MaestroCard(
               title: 'Jugadores',
-              description: 'Gestión de jugadores (próximamente).',
+              description: 'Gestiona jugadores por equipo.',
               icon: Icons.person,
               colorScheme: colorScheme,
-              onTap: () {},
+              onTap: () => Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (_) => const JugadoresEquiposScreen(),
+                ),
+              ),
             ),
             _MaestroCard(
               title: 'Árbitros',
-              description: 'Gestión de árbitros (próximamente).',
+              description: 'Gestión de árbitros.',
               icon: Icons.sports,
               colorScheme: colorScheme,
-              onTap: () {},
+              onTap: () => Navigator.pushNamed(context, '/arbitros'),
+            ),
+            _MaestroCard(
+              title: 'Temporadas',
+              description: 'Organiza temporadas.',
+              icon: Icons.calendar_today,
+              colorScheme: colorScheme,
+              onTap: () => Navigator.pushNamed(context, '/temporadas'),
             ),
           ],
         ),
