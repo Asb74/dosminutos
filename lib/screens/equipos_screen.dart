@@ -13,12 +13,27 @@ class EquiposScreen extends StatelessWidget {
     return _equiposRef.orderBy('nombre').snapshots();
   }
 
+  static const List<String> _categorias = [
+    'Senior',
+    'Juvenil',
+    'Cadete',
+    'Infantil',
+    'Alevín',
+  ];
+
+  static const List<String> _sexos = [
+    'Masculino',
+    'Femenino',
+    'Mixto',
+  ];
+
   Future<void> _showEquipoDialog(BuildContext context, {Equipo? equipo}) async {
     final formKey = GlobalKey<FormState>();
     final nombreController = TextEditingController(text: equipo?.nombre ?? '');
-    final categoriaController =
-        TextEditingController(text: equipo?.categoria ?? '');
+    String? categoria = equipo?.categoria.isNotEmpty == true ? equipo!.categoria : null;
+    String? sexo = equipo?.sexo.isNotEmpty == true ? equipo!.sexo : null;
     final clubController = TextEditingController(text: equipo?.club ?? '');
+    final notasController = TextEditingController(text: equipo?.notas ?? '');
 
     await showDialog(
       context: context,
@@ -43,13 +58,38 @@ class EquiposScreen extends StatelessWidget {
                       return null;
                     },
                   ),
-                  TextFormField(
-                    controller: categoriaController,
-                    decoration: const InputDecoration(labelText: 'Categoría (opcional)'),
+                  const SizedBox(height: 12),
+                  DropdownButtonFormField<String>(
+                    value: categoria,
+                    decoration: const InputDecoration(labelText: 'Categoría'),
+                    items: _categorias
+                        .map((cat) => DropdownMenuItem(value: cat, child: Text(cat)))
+                        .toList(),
+                    onChanged: (value) => categoria = value,
+                    validator: (value) =>
+                        value == null || value.isEmpty ? 'Selecciona una categoría' : null,
                   ),
+                  const SizedBox(height: 12),
+                  DropdownButtonFormField<String>(
+                    value: sexo,
+                    decoration: const InputDecoration(labelText: 'Sexo'),
+                    items: _sexos
+                        .map((s) => DropdownMenuItem(value: s, child: Text(s)))
+                        .toList(),
+                    onChanged: (value) => sexo = value,
+                    validator: (value) =>
+                        value == null || value.isEmpty ? 'Selecciona el sexo' : null,
+                  ),
+                  const SizedBox(height: 12),
                   TextFormField(
                     controller: clubController,
                     decoration: const InputDecoration(labelText: 'Club (opcional)'),
+                  ),
+                  const SizedBox(height: 12),
+                  TextFormField(
+                    controller: notasController,
+                    decoration: const InputDecoration(labelText: 'Notas (opcional)'),
+                    maxLines: 2,
                   ),
                 ],
               ),
@@ -66,13 +106,15 @@ class EquiposScreen extends StatelessWidget {
 
                 final nuevoEquipo = Equipo(
                   nombre: nombreController.text.trim(),
-                  categoria: categoriaController.text.trim().isEmpty
+                  categoria: categoria ?? '',
+                  sexo: sexo ?? '',
+                  club:
+                      clubController.text.trim().isEmpty ? null : clubController.text.trim(),
+                  notas: notasController.text.trim().isEmpty
                       ? null
-                      : categoriaController.text.trim(),
-                  club: clubController.text.trim().isEmpty
-                      ? null
-                      : clubController.text.trim(),
+                      : notasController.text.trim(),
                   id: equipo?.id ?? '',
+                  activo: equipo?.activo ?? true,
                 );
 
                 if (equipo == null) {
@@ -162,10 +204,9 @@ class EquiposScreen extends StatelessWidget {
                 final doc = docs[index];
                 final equipo = Equipo.fromDoc(doc.id, doc.data());
                 final subtitleParts = [
-                  if ((equipo.categoria ?? '').trim().isNotEmpty)
-                    'Categoría: ${equipo.categoria}',
-                  if ((equipo.club ?? '').trim().isNotEmpty)
-                    'Club: ${equipo.club}',
+                  if (equipo.categoria.trim().isNotEmpty) 'Categoría: ${equipo.categoria}',
+                  if (equipo.sexo.trim().isNotEmpty) 'Sexo: ${equipo.sexo}',
+                  if ((equipo.club ?? '').trim().isNotEmpty) 'Club: ${equipo.club}',
                 ];
 
                 return Card(

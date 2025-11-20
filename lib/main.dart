@@ -3,13 +3,17 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 
 import 'firebase_options.dart';
+import 'screens/arbitros_screen.dart';
+import 'screens/equipos_screen.dart';
 import 'screens/historial_partidos_screen.dart';
 import 'screens/home_screen.dart';
+import 'screens/jugadores_equipo_screen.dart';
+import 'screens/jugadores_equipos_screen.dart';
 import 'screens/login_screen.dart';
 import 'screens/maestros_screen.dart';
 import 'screens/nuevo_partido_screen.dart';
 import 'screens/splash_screen.dart';
-import 'screens/equipos_screen.dart';
+import 'screens/temporadas_screen.dart';
 
 const primaryYellow = Color(0xFFFFC727);
 const black = Colors.black;
@@ -70,6 +74,8 @@ class DosMinutosApp extends StatelessWidget {
         '/historial': (context) => const HistorialPartidosScreen(),
         '/equipos': (context) => const EquiposScreen(),
         '/maestros': (context) => const MaestrosScreen(),
+        '/arbitros': (context) => const ArbitrosScreen(),
+        '/temporadas': (context) => const TemporadasScreen(),
       },
     );
   }
