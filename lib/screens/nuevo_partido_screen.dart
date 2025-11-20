@@ -19,7 +19,8 @@ class _NuevoPartidoScreenState extends State<NuevoPartidoScreen> {
   final _pabellonController = TextEditingController();
   final _jornadaController = TextEditingController();
 
-  Campeonato? _campeonatoSeleccionado;
+  String? _selectedCampeonatoId;
+  Campeonato? _selectedCampeonato;
   Equipo? _equipoLocal;
   Equipo? _equipoVisitante;
   String? _arbitro1Id;
@@ -46,12 +47,12 @@ class _NuevoPartidoScreenState extends State<NuevoPartidoScreen> {
   }
 
   Stream<QuerySnapshot<Map<String, dynamic>>>? _equiposStream() {
-    if (_campeonatoSeleccionado == null) return null;
+    if (_selectedCampeonato == null) return null;
 
     return FirebaseFirestore.instance
         .collection('Equipos')
-        .where('categoria', isEqualTo: _campeonatoSeleccionado!.categoria)
-        .where('sexo', isEqualTo: _campeonatoSeleccionado!.sexo)
+        .where('categoria', isEqualTo: _selectedCampeonato!.categoria)
+        .where('sexo', isEqualTo: _selectedCampeonato!.sexo)
         .orderBy('nombre')
         .snapshots();
   }
@@ -104,12 +105,12 @@ class _NuevoPartidoScreenState extends State<NuevoPartidoScreen> {
   }
 
   Future<List<int>> _obtenerConvocadosJugadores() async {
-    if (_campeonatoSeleccionado == null || _equipoLocal == null) return [];
+    if (_selectedCampeonato == null || _equipoLocal == null) return [];
 
     final query = await FirebaseFirestore.instance
         .collection('Jugadores')
         .where('equipoId', isEqualTo: _equipoLocal!.id)
-        .where('categoria', isEqualTo: _campeonatoSeleccionado!.categoria)
+        .where('categoria', isEqualTo: _selectedCampeonato!.categoria)
         .where('convocado', isEqualTo: true)
         .where('lesionado', isEqualTo: false)
         .where('sancionado', isEqualTo: false)
@@ -142,7 +143,7 @@ class _NuevoPartidoScreenState extends State<NuevoPartidoScreen> {
 
   Future<void> _crearPartido() async {
     if (!_formKey.currentState!.validate()) return;
-    if (_campeonatoSeleccionado == null) {
+    if (_selectedCampeonato == null) {
       _mostrarSnackBar('Selecciona un campeonato');
       return;
     }
@@ -171,12 +172,12 @@ class _NuevoPartidoScreenState extends State<NuevoPartidoScreen> {
       final ahora = DateTime.now();
       final partido = Partido(
         idPartido: idPartido,
-        campeonatoId: _campeonatoSeleccionado!.id,
-        campeonatoNombre: _campeonatoSeleccionado!.apodo,
-        temporadaId: _campeonatoSeleccionado!.temporadaId,
-        temporadaNombre: _campeonatoSeleccionado!.temporadaNombre,
-        categoria: _campeonatoSeleccionado!.categoria,
-        sexo: _campeonatoSeleccionado!.sexo,
+        campeonatoId: _selectedCampeonato!.id,
+        campeonatoNombre: _selectedCampeonato!.apodo,
+        temporadaId: _selectedCampeonato!.temporadaId,
+        temporadaNombre: _selectedCampeonato!.temporadaNombre,
+        categoria: _selectedCampeonato!.categoria,
+        sexo: _selectedCampeonato!.sexo,
         equipoLocalId: _equipoLocal!.id,
         equipoLocalNombre: _equipoLocal!.nombre,
         equipoVisitanteId: _equipoVisitante!.id,
@@ -256,37 +257,53 @@ class _NuevoPartidoScreenState extends State<NuevoPartidoScreen> {
                           .toList() ??
                       [];
 
-                  if (campeonatos.isEmpty) {
-                    return const Text('No hay campeonatos activos disponibles.');
-                  }
-
-                  if (_campeonatoSeleccionado != null &&
+                  final hasSelected = _selectedCampeonatoId != null &&
                       campeonatos
-                          .every((c) => c.id != _campeonatoSeleccionado!.id)) {
-                    _campeonatoSeleccionado = null;
+                          .any((c) => c.id == _selectedCampeonatoId);
+
+                  if (campeonatos.isEmpty) {
+                    _selectedCampeonatoId = null;
+                    _selectedCampeonato = null;
+                    return const Text(
+                        'No hay campeonatos activos disponibles.');
                   }
 
-                  return DropdownButtonFormField<Campeonato>(
-                    value: _campeonatoSeleccionado,
+                  if (!hasSelected) {
+                    _selectedCampeonatoId = null;
+                    _selectedCampeonato = null;
+                  } else {
+                    _selectedCampeonato = campeonatos.firstWhere(
+                      (c) => c.id == _selectedCampeonatoId,
+                    );
+                  }
+
+                  final dropdownValue = hasSelected ? _selectedCampeonatoId : null;
+
+                  return DropdownButtonFormField<String>(
+                    value: dropdownValue,
                     decoration: const InputDecoration(
                       labelText: 'Selecciona un campeonato',
                     ),
+                    hint: const Text('Selecciona un campeonato'),
                     items: campeonatos
                         .map(
-                          (campeonato) => DropdownMenuItem(
-                            value: campeonato,
+                          (campeonato) => DropdownMenuItem<String>(
+                            value: campeonato.id,
                             child: Text(campeonato.apodo),
                           ),
                         )
                         .toList(),
                     onChanged: (value) {
                       setState(() {
-                        _campeonatoSeleccionado = value;
+                        _selectedCampeonatoId = value;
+                        _selectedCampeonato = value == null
+                            ? null
+                            : campeonatos.firstWhere((c) => c.id == value);
                         _equipoLocal = null;
                         _equipoVisitante = null;
                       });
                     },
-                    validator: (value) => value == null
+                    validator: (value) => value == null || value.isEmpty
                         ? 'Selecciona un campeonato'
                         : null,
                   );
@@ -298,7 +315,7 @@ class _NuevoPartidoScreenState extends State<NuevoPartidoScreen> {
                 style: TextStyle(fontWeight: FontWeight.bold),
               ),
               const SizedBox(height: 8),
-              _campeonatoSeleccionado == null
+              _selectedCampeonato == null
                   ? const Text('Primero elige un campeonato para ver los equipos.')
                   : StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
                       stream: _equiposStream(),
