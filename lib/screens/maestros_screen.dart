@@ -5,6 +5,7 @@ import 'equipos_screen.dart';
 import 'jugadores_equipos_screen.dart';
 import 'staff_equipos_screen.dart';
 import 'temporadas_screen.dart';
+import 'clubes_screen.dart';
 
 class MaestrosScreen extends StatelessWidget {
   const MaestrosScreen({super.key});
@@ -30,6 +31,13 @@ class MaestrosScreen extends StatelessWidget {
               icon: Icons.groups,
               colorScheme: colorScheme,
               onTap: () => Navigator.pushNamed(context, '/equipos'),
+            ),
+            _MaestroCard(
+              title: 'Clubes',
+              description: 'Gestión de clubes.',
+              icon: Icons.shield_outlined,
+              colorScheme: colorScheme,
+              onTap: () => Navigator.pushNamed(context, '/clubes'),
             ),
             _MaestroCard(
               title: 'Jugadores',

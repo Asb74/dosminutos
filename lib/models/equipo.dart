@@ -3,7 +3,8 @@ class Equipo {
   final String nombre;
   final String categoria;
   final String sexo;
-  final String? club;
+  final String? clubId;
+  final String? clubNombre;
   final bool activo;
   final String? notas;
 
@@ -12,7 +13,8 @@ class Equipo {
     required this.nombre,
     required this.categoria,
     required this.sexo,
-    this.club,
+    this.clubId,
+    this.clubNombre,
     this.activo = true,
     this.notas,
   });
@@ -22,7 +24,8 @@ class Equipo {
       'nombre': nombre,
       'categoria': categoria,
       'sexo': sexo,
-      'club': club,
+      'clubId': clubId,
+      'clubNombre': clubNombre,
       'activo': activo,
       'notas': notas,
     };
@@ -34,7 +37,8 @@ class Equipo {
       nombre: data['nombre'] as String? ?? '',
       categoria: data['categoria'] as String? ?? '',
       sexo: data['sexo'] as String? ?? '',
-      club: data['club'] as String?,
+      clubId: data['clubId'] as String?,
+      clubNombre: data['clubNombre'] as String?,
       activo: data['activo'] as bool? ?? true,
       notas: data['notas'] as String?,
     );

@@ -16,6 +16,7 @@ import 'screens/staff_equipo_screen.dart';
 import 'screens/staff_equipos_screen.dart';
 import 'screens/splash_screen.dart';
 import 'screens/temporadas_screen.dart';
+import 'screens/clubes_screen.dart';
 
 const primaryYellow = Color(0xFFFFC727);
 const black = Colors.black;
@@ -79,6 +80,7 @@ class DosMinutosApp extends StatelessWidget {
         '/arbitros': (context) => const ArbitrosScreen(),
         '/staff': (context) => const StaffEquiposScreen(),
         '/temporadas': (context) => const TemporadasScreen(),
+        '/clubes': (context) => const ClubesScreen(),
       },
     );
   }
