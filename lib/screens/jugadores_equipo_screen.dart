@@ -81,6 +81,13 @@ class _JugadoresEquipoScreenState extends State<JugadoresEquipoScreen> {
     final formKey = GlobalKey<FormState>();
     final apodoController = TextEditingController(text: jugador?.apodo ?? '');
     final nombreController = TextEditingController(text: jugador?.nombre ?? '');
+    final dorsalController = TextEditingController(
+      text: jugador == null
+          ? ''
+          : jugador.dorsal == 0
+              ? ''
+              : jugador.dorsal.toString(),
+    );
     final notasController = TextEditingController(text: jugador?.notas ?? '');
 
     String? posicionAtaque = jugador?.posicionAtaque;
@@ -120,6 +127,22 @@ class _JugadoresEquipoScreenState extends State<JugadoresEquipoScreen> {
                         decoration: const InputDecoration(labelText: 'Nombre completo'),
                         validator: (value) =>
                             value == null || value.trim().isEmpty ? 'Requerido' : null,
+                      ),
+                      const SizedBox(height: 12),
+                      TextFormField(
+                        controller: dorsalController,
+                        keyboardType: TextInputType.number,
+                        decoration: const InputDecoration(labelText: 'Dorsal'),
+                        validator: (value) {
+                          if (value == null || value.trim().isEmpty) {
+                            return 'Requerido';
+                          }
+                          final numero = int.tryParse(value.trim());
+                          if (numero == null || numero < 1 || numero > 99) {
+                            return 'Debe estar entre 1 y 99';
+                          }
+                          return null;
+                        },
                       ),
                       const SizedBox(height: 12),
                       DropdownButtonFormField<String>(
@@ -238,6 +261,7 @@ class _JugadoresEquipoScreenState extends State<JugadoresEquipoScreen> {
                       equipoNombre: widget.equipoNombre,
                       apodo: apodoController.text.trim(),
                       nombre: nombreController.text.trim(),
+                      dorsal: int.parse(dorsalController.text.trim()),
                       posicionAtaque: posicionAtaque ?? '',
                       posicionDefensa: posicionDefensa,
                       fechaNacimiento: fechaNacimiento,
@@ -261,6 +285,7 @@ class _JugadoresEquipoScreenState extends State<JugadoresEquipoScreen> {
                       await _jugadoresRef.doc(jugador.id).update({
                         'apodo': data.apodo,
                         'nombre': data.nombre,
+                        'dorsal': data.dorsal,
                         'posicionAtaque': data.posicionAtaque,
                         'posicionDefensa': data.posicionDefensa,
                         'fechaNacimiento': data.fechaNacimiento,
@@ -348,6 +373,7 @@ class _JugadoresEquipoScreenState extends State<JugadoresEquipoScreen> {
                     subtitle: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
+                        Text('Dorsal: ${jugador.dorsal}'),
                         Text('${jugador.posicionAtaque} · ${jugador.categoria}'),
                         if (estados.isNotEmpty)
                           Text(
@@ -390,7 +416,7 @@ class _JugadoresEquipoScreenState extends State<JugadoresEquipoScreen> {
 }
 
 extension on Jugador {
-  Jugador copyWith({int? idJugador}) {
+  Jugador copyWith({int? idJugador, int? dorsal}) {
     return Jugador(
       id: id,
       idJugador: idJugador ?? this.idJugador,
@@ -398,6 +424,7 @@ extension on Jugador {
       equipoNombre: equipoNombre,
       apodo: apodo,
       nombre: nombre,
+      dorsal: dorsal ?? this.dorsal,
       posicionAtaque: posicionAtaque,
       posicionDefensa: posicionDefensa,
       fechaNacimiento: fechaNacimiento,
