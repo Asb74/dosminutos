@@ -7,8 +7,6 @@ import 'screens/arbitros_screen.dart';
 import 'screens/equipos_screen.dart';
 import 'screens/historial_partidos_screen.dart';
 import 'screens/home_screen.dart';
-import 'screens/jugadores_equipo_screen.dart';
-import 'screens/jugadores_equipos_screen.dart';
 import 'screens/login_screen.dart';
 import 'screens/maestros_screen.dart';
 import 'screens/nuevo_partido_screen.dart';
