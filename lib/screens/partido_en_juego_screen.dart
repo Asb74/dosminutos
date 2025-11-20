@@ -8,7 +8,7 @@ import '../models/evento_partido.dart';
 import '../models/jugador.dart';
 import '../models/partido.dart';
 import '../services/eventos_service.dart';
-import '../widgets/zona_pista_selector.dart';
+import '../widgets/pista_handball_overlay.dart'; // NUEVO
 
 class PartidoEnJuegoScreen extends StatefulWidget {
   final String partidoId;
@@ -131,12 +131,26 @@ class _PartidoEnJuegoScreenState extends State<PartidoEnJuegoScreen> {
       return;
     }
 
+    final debeActualizarMarcador =
+        _golesLocal != partido.golesLocal || _golesVisitante != partido.golesVisitante;
+    final debeActualizarPeriodo = _periodoActual != partido.periodo;
+    final debeActualizarTiempo =
+        !_isRunning && (_baseSeconds != partido.segundoPartido || _elapsedSeconds != partido.segundoPartido);
+
+    if (!debeActualizarMarcador && !debeActualizarPeriodo && !debeActualizarTiempo) {
+      return; // MODIFICADO: evitamos setState innecesarios que causaban parpadeos
+    }
+
     setState(() {
       _partido = partido;
-      _golesLocal = partido.golesLocal;
-      _golesVisitante = partido.golesVisitante;
-      _periodoActual = partido.periodo;
-      if (!_isRunning) {
+      if (debeActualizarMarcador) {
+        _golesLocal = partido.golesLocal;
+        _golesVisitante = partido.golesVisitante;
+      }
+      if (debeActualizarPeriodo) {
+        _periodoActual = partido.periodo;
+      }
+      if (debeActualizarTiempo) {
         _baseSeconds = partido.segundoPartido;
         _elapsedSeconds = partido.segundoPartido;
       }
@@ -325,7 +339,8 @@ class _PartidoEnJuegoScreenState extends State<PartidoEnJuegoScreen> {
                   ),
                   const SizedBox(height: 16),
                   Padding(
-                    padding: const EdgeInsets.all(16.0),
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.stretch,
                       children: [
@@ -334,11 +349,11 @@ class _PartidoEnJuegoScreenState extends State<PartidoEnJuegoScreen> {
                           style: Theme.of(context).textTheme.titleMedium,
                         ),
                         const SizedBox(height: 8),
-                        ZonaPistaSelector(
+                        PistaHandballOverlay(
                           zonaSeleccionada: _zonaSeleccionada,
                           onZonaSelected: (zona) {
                             setState(() {
-                              _zonaSeleccionada = zona;
+                              _zonaSeleccionada = zona; // MODIFICADO: selección sobre imagen
                             });
                           },
                         ),
@@ -348,6 +363,30 @@ class _PartidoEnJuegoScreenState extends State<PartidoEnJuegoScreen> {
                               ? 'Zona seleccionada: ${_zonaSeleccionada!.label}'
                               : 'Toca una zona para seleccionarla',
                           textAlign: TextAlign.center,
+                        ),
+                      ],
+                    ),
+                  ),
+                  Padding(
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        Text(
+                          'Portería (zonas 1-9)',
+                          style: Theme.of(context).textTheme.titleMedium,
+                        ),
+                        const SizedBox(height: 8),
+                        AspectRatio(
+                          aspectRatio: 4 / 3,
+                          child: ClipRRect(
+                            borderRadius: BorderRadius.circular(12),
+                            child: Image.asset(
+                              'assets/pista/porteria_zonas.png',
+                              fit: BoxFit.cover,
+                            ),
+                          ),
                         ),
                       ],
                     ),

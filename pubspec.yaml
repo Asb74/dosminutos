@@ -74,6 +74,8 @@ flutter:
 
   assets:
     - assets/icon/logo_dosminutos.png
+    - assets/pista/pista_handball.png
+    - assets/pista/porteria_zonas.png
 
   # An image asset can refer to one or more resolution-specific "variants", see
   # https://flutter.dev/to/resolution-aware-images
