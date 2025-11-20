@@ -22,16 +22,51 @@ enum FaseJuego {
 }
 
 enum ZonaJuego {
-  seisIzquierda,
-  seisCentro,
-  seisDerecha,
-  nueveIzquierda,
-  nueveCentro,
-  nueveDerecha,
-  sieteMetros,
-  contraataque,
-  contraataque2,
-  lanzamientoLargo,
+  // 6 metros
+  seisED, // 6ED - extremo derecho
+  seisLD, // 6LD - lateral derecho
+  seisC, // 6C  - central
+  seisLE, // 6LE - lateral izquierdo
+  seisEE, // 6EE - extremo izquierdo
+
+  // 8 metros (segunda línea)
+  ochoD, // 8D
+  ochoC, // 8C
+  ochoE, // 8E
+
+  // 9 metros
+  nueveD, // 9D
+  nueveC, // 9C
+  nueveE, // 9E
+}
+
+extension ZonaJuegoExt on ZonaJuego {
+  String get label {
+    switch (this) {
+      case ZonaJuego.seisED:
+        return '6ED';
+      case ZonaJuego.seisLD:
+        return '6LD';
+      case ZonaJuego.seisC:
+        return '6C';
+      case ZonaJuego.seisLE:
+        return '6LE';
+      case ZonaJuego.seisEE:
+        return '6EE';
+      case ZonaJuego.ochoD:
+        return '8D';
+      case ZonaJuego.ochoC:
+        return '8C';
+      case ZonaJuego.ochoE:
+        return '8E';
+      case ZonaJuego.nueveD:
+        return '9D';
+      case ZonaJuego.nueveC:
+        return '9C';
+      case ZonaJuego.nueveE:
+        return '9E';
+    }
+  }
 }
 
 class EventoPartido {
