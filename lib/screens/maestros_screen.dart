@@ -27,7 +27,7 @@ class MaestrosScreen extends StatelessWidget {
           children: [
             _MaestroCard(
               title: 'Equipos',
-              description: 'Crea y administra equipos.',
+              description: 'Gestiona los equipos de cada club.',
               icon: Icons.groups,
               colorScheme: colorScheme,
               onTap: () => Navigator.pushNamed(context, '/equipos'),
