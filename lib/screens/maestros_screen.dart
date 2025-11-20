@@ -1,11 +1,11 @@
 import 'package:flutter/material.dart';
 
 import 'arbitros_screen.dart';
+import 'clubes_screen.dart';
 import 'equipos_screen.dart';
-import 'jugadores_equipos_screen.dart';
+import 'jugadores_clubes_screen.dart';
 import 'staff_equipos_screen.dart';
 import 'temporadas_screen.dart';
-import 'clubes_screen.dart';
 
 class MaestrosScreen extends StatelessWidget {
   const MaestrosScreen({super.key});
@@ -47,7 +47,7 @@ class MaestrosScreen extends StatelessWidget {
               onTap: () => Navigator.push(
                 context,
                 MaterialPageRoute(
-                  builder: (_) => const JugadoresEquiposScreen(),
+                  builder: (_) => const JugadoresClubesScreen(),
                 ),
               ),
             ),

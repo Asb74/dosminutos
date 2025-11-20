@@ -3,10 +3,10 @@ import 'package:flutter/material.dart';
 
 import '../models/club.dart';
 import '../widgets/navigation_card_button.dart';
-import 'equipos_de_club_screen.dart';
+import 'jugadores_equipos_screen.dart';
 
-class EquiposScreen extends StatelessWidget {
-  const EquiposScreen({super.key});
+class JugadoresClubesScreen extends StatelessWidget {
+  const JugadoresClubesScreen({super.key});
 
   CollectionReference<Map<String, dynamic>> get _clubesRef =>
       FirebaseFirestore.instance.collection('Clubes');
@@ -15,22 +15,13 @@ class EquiposScreen extends StatelessWidget {
     return _clubesRef.orderBy('apodo').snapshots();
   }
 
-  void _abrirEquiposDeClub(BuildContext context, Club club) {
-    Navigator.push(
-      context,
-      MaterialPageRoute(
-        builder: (_) => EquiposDeClubScreen(club: club),
-      ),
-    );
-  }
-
   @override
   Widget build(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Equipos por club'),
+        title: const Text('Jugadores – Clubes'),
       ),
       body: Padding(
         padding: const EdgeInsets.all(16),
@@ -38,7 +29,7 @@ class EquiposScreen extends StatelessWidget {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(
-              'Selecciona un club para gestionar sus equipos.',
+              'Selecciona un club para gestionar sus jugadores.',
               style: TextStyle(color: colorScheme.onSurface.withOpacity(0.8)),
             ),
             const SizedBox(height: 12),
@@ -70,20 +61,25 @@ class EquiposScreen extends StatelessWidget {
                     separatorBuilder: (_, __) => const SizedBox(height: 12),
                     itemBuilder: (context, index) {
                       final club = Club.fromDoc(docs[index].id, docs[index].data());
-                      final detalles = <String>[
+
+                      final subtitleParts = <String>[
                         club.nombre,
                         if ((club.ciudad ?? '').trim().isNotEmpty)
                           'Ciudad: ${club.ciudad}',
-                        if ((club.pabellon ?? '').trim().isNotEmpty)
-                          'Pabellón: ${club.pabellon}',
                       ];
 
                       return NavigationCardButton(
                         icon: Icons.groups,
                         title: club.apodo,
-                        subtitle:
-                            detalles.isEmpty ? null : detalles.join('  ·  '),
-                        onTap: () => _abrirEquiposDeClub(context, club),
+                        subtitle: subtitleParts.isEmpty
+                            ? null
+                            : '${subtitleParts.join(' · ')}',
+                        onTap: () => Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (_) => JugadoresEquiposScreen(club: club),
+                          ),
+                        ),
                       );
                     },
                   );
