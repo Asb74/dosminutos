@@ -8,6 +8,7 @@ import '../models/evento_partido.dart';
 import '../models/jugador.dart';
 import '../models/partido.dart';
 import '../services/eventos_service.dart';
+import '../widgets/zona_pista_selector.dart';
 
 class PartidoEnJuegoScreen extends StatefulWidget {
   final String partidoId;
@@ -37,6 +38,7 @@ class _PartidoEnJuegoScreenState extends State<PartidoEnJuegoScreen> {
   FaseJuego _faseSeleccionada = FaseJuego.ataque;
   String? _equipoSeleccionado;
   String? _jugadorSeleccionado;
+  ZonaJuego? _zonaSeleccionada;
 
   final TextEditingController _notaController = TextEditingController();
 
@@ -223,7 +225,7 @@ class _PartidoEnJuegoScreenState extends State<PartidoEnJuegoScreen> {
       jugadorId: _jugadorSeleccionado,
       tipoAccion: _selectedAccion,
       fase: _faseSeleccionada,
-      zona: null,
+      zona: _zonaSeleccionada,
       resultado: null,
       esPenalty: false,
       nota: notaFinal.isEmpty ? null : notaFinal,
@@ -319,6 +321,35 @@ class _PartidoEnJuegoScreenState extends State<PartidoEnJuegoScreen> {
                       onPressed: _finalizarPartido,
                       icon: const Icon(Icons.flag),
                       label: const Text('Finalizar partido'),
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  Padding(
+                    padding: const EdgeInsets.all(16.0),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        Text(
+                          'Zona de lanzamiento',
+                          style: Theme.of(context).textTheme.titleMedium,
+                        ),
+                        const SizedBox(height: 8),
+                        ZonaPistaSelector(
+                          zonaSeleccionada: _zonaSeleccionada,
+                          onZonaSelected: (zona) {
+                            setState(() {
+                              _zonaSeleccionada = zona;
+                            });
+                          },
+                        ),
+                        const SizedBox(height: 8),
+                        Text(
+                          _zonaSeleccionada != null
+                              ? 'Zona seleccionada: ${_zonaSeleccionada!.label}'
+                              : 'Toca una zona para seleccionarla',
+                          textAlign: TextAlign.center,
+                        ),
+                      ],
                     ),
                   ),
                   const SizedBox(height: 16),
