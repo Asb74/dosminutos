@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'arbitros_screen.dart';
 import 'equipos_screen.dart';
 import 'jugadores_equipos_screen.dart';
+import 'staff_equipos_screen.dart';
 import 'temporadas_screen.dart';
 
 class MaestrosScreen extends StatelessWidget {
@@ -48,6 +49,18 @@ class MaestrosScreen extends StatelessWidget {
               icon: Icons.sports,
               colorScheme: colorScheme,
               onTap: () => Navigator.pushNamed(context, '/arbitros'),
+            ),
+            _MaestroCard(
+              title: 'Staff técnico',
+              description: 'Entrenadores y cuerpo técnico.',
+              icon: Icons.group,
+              colorScheme: colorScheme,
+              onTap: () => Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (_) => const StaffEquiposScreen(),
+                ),
+              ),
             ),
             _MaestroCard(
               title: 'Temporadas',
