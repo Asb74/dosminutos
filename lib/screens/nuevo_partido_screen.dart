@@ -6,6 +6,7 @@ import '../models/campeonato.dart';
 import '../models/equipo.dart';
 import '../models/partido.dart';
 import '../services/counter_service.dart';
+import 'partido_en_juego_screen.dart';
 
 class NuevoPartidoScreen extends StatefulWidget {
   const NuevoPartidoScreen({super.key});
@@ -223,13 +224,12 @@ class _NuevoPartidoScreenState extends State<NuevoPartidoScreen> {
         updatedAt: ahora,
       );
 
-      await FirebaseFirestore.instance
+      final docRef = await FirebaseFirestore.instance
           .collection('Partidos')
           .add(partido.toMap());
 
       if (mounted) {
-        Navigator.of(context).pop();
-        _mostrarSnackBar('Partido creado correctamente');
+        await _mostrarDialogoExito(docRef.id);
       }
     } catch (e) {
       _mostrarSnackBar('Error al crear partido: $e');
@@ -241,6 +241,43 @@ class _NuevoPartidoScreenState extends State<NuevoPartidoScreen> {
   void _mostrarSnackBar(String mensaje) {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(content: Text(mensaje)),
+    );
+  }
+
+  Future<void> _mostrarDialogoExito(String partidoId) async {
+    await showDialog(
+      context: context,
+      builder: (context) {
+        return AlertDialog(
+          title: const Text('Partido creado correctamente'),
+          content: const Text(
+            'Puedes ir directamente al partido para empezar a registrar eventos.',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () {
+                Navigator.of(context).pop();
+                Navigator.of(context).pop();
+              },
+              child: const Text('Cerrar'),
+            ),
+            FilledButton.icon(
+              onPressed: () {
+                Navigator.of(context).pop();
+                Navigator.of(context).pushReplacement(
+                  MaterialPageRoute(
+                    builder: (_) => PartidoEnJuegoScreen(
+                      partidoId: partidoId,
+                    ),
+                  ),
+                );
+              },
+              icon: const Icon(Icons.sports_handball),
+              label: const Text('Ir al partido'),
+            ),
+          ],
+        );
+      },
     );
   }
 
