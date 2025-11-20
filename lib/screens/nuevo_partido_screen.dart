@@ -21,8 +21,10 @@ class _NuevoPartidoScreenState extends State<NuevoPartidoScreen> {
 
   String? _selectedCampeonatoId;
   Campeonato? _selectedCampeonato;
-  Equipo? _equipoLocal;
-  Equipo? _equipoVisitante;
+  String? _selectedEquipoLocalId;
+  String? _selectedEquipoVisitanteId;
+  Equipo? _selectedEquipoLocal;
+  Equipo? _selectedEquipoVisitante;
   String? _arbitro1Id;
   String? _arbitro2Id;
   String? _mesa1Id;
@@ -106,11 +108,11 @@ class _NuevoPartidoScreenState extends State<NuevoPartidoScreen> {
   }
 
   Future<List<int>> _obtenerConvocadosJugadores() async {
-    if (_selectedCampeonato == null || _equipoLocal == null) return [];
+    if (_selectedCampeonato == null || _selectedEquipoLocal == null) return [];
 
     final query = await FirebaseFirestore.instance
         .collection('Jugadores')
-        .where('equipoId', isEqualTo: _equipoLocal!.id)
+        .where('equipoId', isEqualTo: _selectedEquipoLocal!.id)
         .where('categoria', isEqualTo: _selectedCampeonato!.categoria)
         .where('convocado', isEqualTo: true)
         .where('lesionado', isEqualTo: false)
@@ -125,11 +127,11 @@ class _NuevoPartidoScreenState extends State<NuevoPartidoScreen> {
   }
 
   Future<List<int>> _obtenerConvocadosStaff() async {
-    if (_equipoLocal == null) return [];
+    if (_selectedEquipoLocal == null) return [];
 
     final query = await FirebaseFirestore.instance
         .collection('StaffTecnico')
-        .where('equipoId', isEqualTo: _equipoLocal!.id)
+        .where('equipoId', isEqualTo: _selectedEquipoLocal!.id)
         .where('convocado', isEqualTo: true)
         .where('lesionado', isEqualTo: false)
         .where('sancionado', isEqualTo: false)
@@ -148,11 +150,11 @@ class _NuevoPartidoScreenState extends State<NuevoPartidoScreen> {
       _mostrarSnackBar('Selecciona un campeonato');
       return;
     }
-    if (_equipoLocal == null || _equipoVisitante == null) {
+    if (_selectedEquipoLocal == null || _selectedEquipoVisitante == null) {
       _mostrarSnackBar('Selecciona los equipos local y visitante');
       return;
     }
-    if (_equipoLocal!.id == _equipoVisitante!.id) {
+    if (_selectedEquipoLocal!.id == _selectedEquipoVisitante!.id) {
       _mostrarSnackBar('Los equipos no pueden ser iguales');
       return;
     }
@@ -179,10 +181,10 @@ class _NuevoPartidoScreenState extends State<NuevoPartidoScreen> {
         temporadaNombre: _selectedCampeonato!.temporadaNombre,
         categoria: _selectedCampeonato!.categoria,
         sexo: _selectedCampeonato!.sexo,
-        equipoLocalId: _equipoLocal!.id,
-        equipoLocalNombre: _equipoLocal!.nombre,
-        equipoVisitanteId: _equipoVisitante!.id,
-        equipoVisitanteNombre: _equipoVisitante!.nombre,
+        equipoLocalId: _selectedEquipoLocal?.id,
+        equipoLocalNombre: _selectedEquipoLocal?.nombre,
+        equipoVisitanteId: _selectedEquipoVisitante?.id,
+        equipoVisitanteNombre: _selectedEquipoVisitante?.nombre,
         fechaHora: _fechaHora!,
         pabellon: _pabellonController.text.trim(),
         jornada: _jornadaController.text.trim().isEmpty
@@ -300,8 +302,10 @@ class _NuevoPartidoScreenState extends State<NuevoPartidoScreen> {
                         _selectedCampeonato = value == null
                             ? null
                             : campeonatos.firstWhere((c) => c.id == value);
-                        _equipoLocal = null;
-                        _equipoVisitante = null;
+                        _selectedEquipoLocalId = null;
+                        _selectedEquipoVisitanteId = null;
+                        _selectedEquipoLocal = null;
+                        _selectedEquipoVisitante = null;
                       });
                     },
                     validator: (value) => value == null || value.isEmpty
@@ -343,62 +347,100 @@ class _NuevoPartidoScreenState extends State<NuevoPartidoScreen> {
                               'No hay equipos para la categoría y sexo seleccionados.');
                         }
 
-                        if (_equipoLocal != null &&
-                            equipos.every((e) => e.id != _equipoLocal!.id)) {
-                          _equipoLocal = null;
+                        if (_selectedEquipoLocalId != null &&
+                            equipos
+                                .every((e) => e.id != _selectedEquipoLocalId)) {
+                          _selectedEquipoLocalId = null;
+                          _selectedEquipoLocal = null;
                         }
 
-                        if (_equipoVisitante != null &&
-                            equipos.every((e) => e.id != _equipoVisitante!.id)) {
-                          _equipoVisitante = null;
+                        if (_selectedEquipoVisitanteId != null &&
+                            equipos.every(
+                                (e) => e.id != _selectedEquipoVisitanteId)) {
+                          _selectedEquipoVisitanteId = null;
+                          _selectedEquipoVisitante = null;
                         }
 
                         return Column(
                           children: [
-                            DropdownButtonFormField<Equipo>(
-                              value: _equipoLocal,
+                            DropdownButtonFormField<String>(
+                              value: _selectedEquipoLocalId != null &&
+                                      equipos.any(
+                                          (e) => e.id == _selectedEquipoLocalId)
+                                  ? _selectedEquipoLocalId
+                                  : null,
                               decoration: const InputDecoration(
                                 labelText: 'Equipo local',
                               ),
-                              items: equipos
-                                  .map(
-                                    (equipo) => DropdownMenuItem(
-                                      value: equipo,
-                                      child: Text(equipo.nombre),
-                                    ),
-                                  )
-                                  .toList(),
+                              hint: const Text('Selecciona equipo local'),
+                              items: equipos.map((equipo) {
+                                return DropdownMenuItem<String>(
+                                  value: equipo.id,
+                                  child: Text(equipo.nombre),
+                                );
+                              }).toList(),
                               onChanged: (value) {
                                 setState(() {
-                                  _equipoLocal = value;
+                                  _selectedEquipoLocalId = value;
+                                  _selectedEquipoLocal = value == null
+                                      ? null
+                                      : equipos
+                                          .firstWhere((e) => e.id == value);
+
+                                  if (_selectedEquipoVisitanteId ==
+                                      _selectedEquipoLocalId) {
+                                    _selectedEquipoVisitanteId = null;
+                                    _selectedEquipoVisitante = null;
+                                  }
                                 });
                               },
-                              validator: (value) => value == null
-                                  ? 'Selecciona el equipo local'
-                                  : null,
+                              validator: (value) {
+                                if (value == null || value.isEmpty) {
+                                  return 'Selecciona un equipo local';
+                                }
+                                return null;
+                              },
                             ),
                             const SizedBox(height: 12),
-                            DropdownButtonFormField<Equipo>(
-                              value: _equipoVisitante,
+                            DropdownButtonFormField<String>(
+                              value: _selectedEquipoVisitanteId != null &&
+                                      equipos.any((e) =>
+                                          e.id == _selectedEquipoVisitanteId)
+                                  ? _selectedEquipoVisitanteId
+                                  : null,
                               decoration: const InputDecoration(
                                 labelText: 'Equipo visitante',
                               ),
-                              items: equipos
-                                  .map(
-                                    (equipo) => DropdownMenuItem(
-                                      value: equipo,
-                                      child: Text(equipo.nombre),
-                                    ),
-                                  )
-                                  .toList(),
+                              hint: const Text('Selecciona equipo visitante'),
+                              items: equipos.map((equipo) {
+                                return DropdownMenuItem<String>(
+                                  value: equipo.id,
+                                  child: Text(equipo.nombre),
+                                );
+                              }).toList(),
                               onChanged: (value) {
                                 setState(() {
-                                  _equipoVisitante = value;
+                                  if (value != null &&
+                                      value == _selectedEquipoLocalId) {
+                                    return;
+                                  }
+
+                                  _selectedEquipoVisitanteId = value;
+                                  _selectedEquipoVisitante = value == null
+                                      ? null
+                                      : equipos
+                                          .firstWhere((e) => e.id == value);
                                 });
                               },
-                              validator: (value) => value == null
-                                  ? 'Selecciona el equipo visitante'
-                                  : null,
+                              validator: (value) {
+                                if (value == null || value.isEmpty) {
+                                  return 'Selecciona un equipo visitante';
+                                }
+                                if (value == _selectedEquipoLocalId) {
+                                  return 'El equipo visitante debe ser distinto del local';
+                                }
+                                return null;
+                              },
                             ),
                           ],
                         );
