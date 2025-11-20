@@ -168,8 +168,12 @@ class _NuevoPartidoScreenState extends State<NuevoPartidoScreen> {
       _mostrarSnackBar('Selecciona un campeonato');
       return;
     }
-    if (_selectedEquipoLocal == null || _selectedEquipoVisitante == null) {
-      _mostrarSnackBar('Selecciona los equipos local y visitante');
+    if (_selectedEquipoLocal == null) {
+      _mostrarSnackBar('Debes seleccionar el equipo local.');
+      return;
+    }
+    if (_selectedEquipoVisitante == null) {
+      _mostrarSnackBar('Debes seleccionar el equipo visitante.');
       return;
     }
     if (_selectedEquipoLocal!.id == _selectedEquipoVisitante!.id) {
@@ -199,10 +203,10 @@ class _NuevoPartidoScreenState extends State<NuevoPartidoScreen> {
         temporadaNombre: _selectedCampeonato!.temporadaNombre,
         categoria: _selectedCampeonato!.categoria,
         sexo: _selectedCampeonato!.sexo,
-        equipoLocalId: _selectedEquipoLocal?.id,
-        equipoLocalNombre: _selectedEquipoLocal?.nombre,
-        equipoVisitanteId: _selectedEquipoVisitante?.id,
-        equipoVisitanteNombre: _selectedEquipoVisitante?.nombre,
+        equipoLocalId: _selectedEquipoLocal?.id ?? '',
+        equipoLocalNombre: _selectedEquipoLocal?.nombre ?? '',
+        equipoVisitanteId: _selectedEquipoVisitante?.id ?? '',
+        equipoVisitanteNombre: _selectedEquipoVisitante?.nombre ?? '',
         fechaHora: _fechaHora!,
         pabellon: _pabellonController.text.trim(),
         jornada: _jornadaController.text.trim().isEmpty
