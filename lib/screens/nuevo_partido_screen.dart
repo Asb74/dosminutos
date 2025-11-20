@@ -126,6 +126,24 @@ class _NuevoPartidoScreenState extends State<NuevoPartidoScreen> {
         .toList();
   }
 
+  Future<void> _autocompletarPabellonDesdeClub(Equipo? equipoLocal) async {
+    if (equipoLocal?.clubId == null || equipoLocal!.clubId!.isEmpty) return;
+    if (_pabellonController.text.trim().isNotEmpty) return;
+
+    final snapshot = await FirebaseFirestore.instance
+        .collection('Clubes')
+        .doc(equipoLocal.clubId)
+        .get();
+
+    final pabellon = snapshot.data()?['pabellon'] as String?;
+
+    if (pabellon != null &&
+        pabellon.trim().isNotEmpty &&
+        _pabellonController.text.trim().isEmpty) {
+      _pabellonController.text = pabellon;
+    }
+  }
+
   Future<List<int>> _obtenerConvocadosStaff() async {
     if (_selectedEquipoLocal == null) return [];
 
@@ -379,7 +397,7 @@ class _NuevoPartidoScreenState extends State<NuevoPartidoScreen> {
                                   child: Text(equipo.nombre),
                                 );
                               }).toList(),
-                              onChanged: (value) {
+                              onChanged: (value) async {
                                 setState(() {
                                   _selectedEquipoLocalId = value;
                                   _selectedEquipoLocal = value == null
@@ -393,6 +411,10 @@ class _NuevoPartidoScreenState extends State<NuevoPartidoScreen> {
                                     _selectedEquipoVisitante = null;
                                   }
                                 });
+
+                                await _autocompletarPabellonDesdeClub(
+                                  _selectedEquipoLocal,
+                                );
                               },
                               validator: (value) {
                                 if (value == null || value.isEmpty) {
@@ -533,7 +555,13 @@ class _NuevoPartidoScreenState extends State<NuevoPartidoScreen> {
                                 .map(
                                   (a) => DropdownMenuItem<String?>(
                                     value: a.id,
-                                    child: Text(a.nombre),
+                                    child: Text(
+                                      a.nombre,
+                                      style:
+                                          Theme.of(context).textTheme.bodySmall,
+                                      overflow: TextOverflow.ellipsis,
+                                      maxLines: 1,
+                                    ),
                                   ),
                                 )
                                 .toList(),
@@ -557,7 +585,13 @@ class _NuevoPartidoScreenState extends State<NuevoPartidoScreen> {
                                 .map(
                                   (a) => DropdownMenuItem<String?>(
                                     value: a.id,
-                                    child: Text(a.nombre),
+                                    child: Text(
+                                      a.nombre,
+                                      style:
+                                          Theme.of(context).textTheme.bodySmall,
+                                      overflow: TextOverflow.ellipsis,
+                                      maxLines: 1,
+                                    ),
                                   ),
                                 )
                                 .toList(),
@@ -611,7 +645,13 @@ class _NuevoPartidoScreenState extends State<NuevoPartidoScreen> {
                                 .map(
                                   (m) => DropdownMenuItem<String?>(
                                     value: m.id,
-                                    child: Text(m.nombre),
+                                    child: Text(
+                                      m.nombre,
+                                      style:
+                                          Theme.of(context).textTheme.bodySmall,
+                                      overflow: TextOverflow.ellipsis,
+                                      maxLines: 1,
+                                    ),
                                   ),
                                 )
                                 .toList(),
@@ -635,7 +675,13 @@ class _NuevoPartidoScreenState extends State<NuevoPartidoScreen> {
                                 .map(
                                   (m) => DropdownMenuItem<String?>(
                                     value: m.id,
-                                    child: Text(m.nombre),
+                                    child: Text(
+                                      m.nombre,
+                                      style:
+                                          Theme.of(context).textTheme.bodySmall,
+                                      overflow: TextOverflow.ellipsis,
+                                      maxLines: 1,
+                                    ),
                                   ),
                                 )
                                 .toList(),

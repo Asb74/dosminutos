@@ -2,6 +2,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 
 import '../models/club.dart';
+import 'equipos_de_club_screen.dart';
 
 class ClubesScreen extends StatelessWidget {
   const ClubesScreen({super.key});
@@ -128,7 +129,9 @@ class ClubesScreen extends StatelessWidget {
                       const SizedBox(height: 12),
                       TextFormField(
                         controller: pabellonController,
-                        decoration: const InputDecoration(labelText: 'Pabellón'),
+                        decoration: const InputDecoration(
+                          labelText: 'Pabellón principal',
+                        ),
                       ),
                       const SizedBox(height: 12),
                       TextFormField(
@@ -340,6 +343,16 @@ class ClubesScreen extends StatelessWidget {
                     trailing: Row(
                       mainAxisSize: MainAxisSize.min,
                       children: [
+                        IconButton(
+                          icon: const Icon(Icons.groups),
+                          tooltip: 'Ver equipos',
+                          onPressed: () => Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (_) => EquiposDeClubScreen(club: club),
+                            ),
+                          ),
+                        ),
                         IconButton(
                           icon: const Icon(Icons.edit),
                           tooltip: 'Editar',
