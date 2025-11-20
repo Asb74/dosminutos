@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "786834128452",
+    "project_id": "minutos-5d44f",
+    "storage_bucket": "minutos-5d44f.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:786834128452:android:30d31808c68e0e47998611",
+        "android_client_info": {
+          "package_name": "com.asb.dosminutos"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyCqY0Buwfbi7JbVjlLT2dfgd3TltELcd_g"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

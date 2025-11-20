@@ -33,38 +33,39 @@ class DefaultFirebaseOptions {
   }
 
   static const FirebaseOptions web = FirebaseOptions(
-    apiKey: 'YOUR_WEB_API_KEY',
-    appId: 'YOUR_WEB_APP_ID',
-    messagingSenderId: 'YOUR_WEB_MESSAGING_SENDER_ID',
-    projectId: 'YOUR_PROJECT_ID',
-    authDomain: 'YOUR_AUTH_DOMAIN',
-    storageBucket: 'YOUR_STORAGE_BUCKET',
-    measurementId: 'YOUR_MEASUREMENT_ID',
+    apiKey: 'AIzaSyCEUPBbbohnEXotG-Mkphi-_2QSKmdVt1U',
+    appId: '1:786834128452:web:fa8476370cf1045e998611',
+    messagingSenderId: '786834128452',
+    projectId: 'minutos-5d44f',
+    authDomain: 'minutos-5d44f.firebaseapp.com',
+    storageBucket: 'minutos-5d44f.firebasestorage.app',
+    measurementId: 'G-ZE3PFG1V99',
   );
 
   static const FirebaseOptions android = FirebaseOptions(
-    apiKey: 'YOUR_ANDROID_API_KEY',
-    appId: 'YOUR_ANDROID_APP_ID',
-    messagingSenderId: 'YOUR_ANDROID_MESSAGING_SENDER_ID',
-    projectId: 'YOUR_PROJECT_ID',
-    storageBucket: 'YOUR_STORAGE_BUCKET',
+    apiKey: 'AIzaSyCqY0Buwfbi7JbVjlLT2dfgd3TltELcd_g',
+    appId: '1:786834128452:android:30d31808c68e0e47998611',
+    messagingSenderId: '786834128452',
+    projectId: 'minutos-5d44f',
+    storageBucket: 'minutos-5d44f.firebasestorage.app',
   );
 
   static const FirebaseOptions ios = FirebaseOptions(
-    apiKey: 'YOUR_IOS_API_KEY',
-    appId: 'YOUR_IOS_APP_ID',
-    messagingSenderId: 'YOUR_IOS_MESSAGING_SENDER_ID',
-    projectId: 'YOUR_PROJECT_ID',
-    storageBucket: 'YOUR_STORAGE_BUCKET',
-    iosBundleId: 'com.example.yourBundleId',
+    apiKey: 'AIzaSyBiBIShxcw0wCczafXkSYBq3sHxP8VZlPE',
+    appId: '1:786834128452:ios:11e1a8542e5a9d0e998611',
+    messagingSenderId: '786834128452',
+    projectId: 'minutos-5d44f',
+    storageBucket: 'minutos-5d44f.firebasestorage.app',
+    iosBundleId: 'com.asb.dosminutos',
   );
 
   static const FirebaseOptions macos = FirebaseOptions(
-    apiKey: 'YOUR_MACOS_API_KEY',
-    appId: 'YOUR_MACOS_APP_ID',
-    messagingSenderId: 'YOUR_MACOS_MESSAGING_SENDER_ID',
-    projectId: 'YOUR_PROJECT_ID',
-    storageBucket: 'YOUR_STORAGE_BUCKET',
-    iosBundleId: 'com.example.yourBundleId',
+    apiKey: 'AIzaSyBiBIShxcw0wCczafXkSYBq3sHxP8VZlPE',
+    appId: '1:786834128452:ios:11e1a8542e5a9d0e998611',
+    messagingSenderId: '786834128452',
+    projectId: 'minutos-5d44f',
+    storageBucket: 'minutos-5d44f.firebasestorage.app',
+    iosBundleId: 'com.asb.dosminutos',
   );
+
 }
