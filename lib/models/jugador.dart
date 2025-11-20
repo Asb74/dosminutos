@@ -7,6 +7,7 @@ class Jugador {
   final String equipoNombre;
   final String apodo;
   final String nombre;
+  final int dorsal;
   final String posicionAtaque;
   final String? posicionDefensa;
   final DateTime? fechaNacimiento;
@@ -25,6 +26,7 @@ class Jugador {
     required this.equipoNombre,
     required this.apodo,
     required this.nombre,
+    required this.dorsal,
     required this.posicionAtaque,
     this.posicionDefensa,
     this.fechaNacimiento,
@@ -44,6 +46,7 @@ class Jugador {
       'equipoNombre': equipoNombre,
       'apodo': apodo,
       'nombre': nombre,
+      'dorsal': dorsal,
       'posicionAtaque': posicionAtaque,
       'posicionDefensa': posicionDefensa,
       'fechaNacimiento': fechaNacimiento,
@@ -66,6 +69,7 @@ class Jugador {
       equipoNombre: data['equipoNombre'] as String? ?? '',
       apodo: data['apodo'] as String? ?? '',
       nombre: data['nombre'] as String? ?? '',
+      dorsal: (data['dorsal'] as num?)?.toInt() ?? 0,
       posicionAtaque: data['posicionAtaque'] as String? ?? '',
       posicionDefensa: data['posicionDefensa'] as String?,
       fechaNacimiento: fecha is DateTime
