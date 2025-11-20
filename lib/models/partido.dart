@@ -23,6 +23,10 @@ class Partido {
   final List<int> jugadoresConvocados;
   final List<int> staffConvocado;
   final String estado;
+  final int golesLocal;
+  final int golesVisitante;
+  final int periodo;
+  final int segundoPartido;
   final DateTime createdAt;
   final DateTime updatedAt;
 
@@ -49,6 +53,10 @@ class Partido {
     this.jugadoresConvocados = const [],
     this.staffConvocado = const [],
     this.estado = 'Programado',
+    this.golesLocal = 0,
+    this.golesVisitante = 0,
+    this.periodo = 1,
+    this.segundoPartido = 0,
     required this.createdAt,
     required this.updatedAt,
   });
@@ -76,6 +84,10 @@ class Partido {
       'jugadoresConvocados': jugadoresConvocados,
       'staffConvocado': staffConvocado,
       'estado': estado,
+      'golesLocal': golesLocal,
+      'golesVisitante': golesVisitante,
+      'periodo': periodo,
+      'segundoPartido': segundoPartido,
       'createdAt': Timestamp.fromDate(createdAt),
       'updatedAt': Timestamp.fromDate(updatedAt),
     };
@@ -121,6 +133,10 @@ class Partido {
       jugadoresConvocados: parseIntList(data['jugadoresConvocados']),
       staffConvocado: parseIntList(data['staffConvocado']),
       estado: data['estado'] as String? ?? 'Programado',
+      golesLocal: (data['golesLocal'] as num?)?.toInt() ?? 0,
+      golesVisitante: (data['golesVisitante'] as num?)?.toInt() ?? 0,
+      periodo: (data['periodo'] as num?)?.toInt() ?? 1,
+      segundoPartido: (data['segundoPartido'] as num?)?.toInt() ?? 0,
       createdAt: toDate(data['createdAt']),
       updatedAt: toDate(data['updatedAt']),
     );

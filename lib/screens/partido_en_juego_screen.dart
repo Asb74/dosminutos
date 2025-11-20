@@ -23,9 +23,16 @@ class PartidoEnJuegoScreen extends StatefulWidget {
 
 class _PartidoEnJuegoScreenState extends State<PartidoEnJuegoScreen> {
   Timer? _timer;
+  Stopwatch _stopwatch = Stopwatch();
   int _elapsedSeconds = 0;
+  int _baseSeconds = 0;
   bool _isRunning = false;
-  int _periodo = 1;
+  bool _hasStarted = false;
+  int _periodoActual = 1;
+  int _golesLocal = 0;
+  int _golesVisitante = 0;
+  Partido? _partido;
+  bool _hasInitializedFromPartido = false;
   TipoAccion _selectedAccion = TipoAccion.gol;
   FaseJuego _faseSeleccionada = FaseJuego.ataque;
   String? _equipoSeleccionado;
@@ -39,15 +46,29 @@ class _PartidoEnJuegoScreenState extends State<PartidoEnJuegoScreen> {
   @override
   void dispose() {
     _timer?.cancel();
+    _stopwatch.stop();
+    _baseSeconds += _stopwatch.elapsed.inSeconds;
+    _elapsedSeconds = _baseSeconds;
+    _persistTiempoPeriodo();
     _notaController.dispose();
     super.dispose();
   }
 
   void _startTimer() {
     if (_isRunning) return;
+
+    if (!_hasStarted) {
+      FirebaseFirestore.instance
+          .collection('Partidos')
+          .doc(widget.partidoId)
+          .update({'estado': 'EnJuego'});
+      _hasStarted = true;
+    }
+
+    _stopwatch.start();
     _timer = Timer.periodic(const Duration(seconds: 1), (_) {
       setState(() {
-        _elapsedSeconds++;
+        _elapsedSeconds = _baseSeconds + _stopwatch.elapsed.inSeconds;
       });
     });
     setState(() {
@@ -57,22 +78,97 @@ class _PartidoEnJuegoScreenState extends State<PartidoEnJuegoScreen> {
 
   void _stopTimer() {
     _timer?.cancel();
+    _stopwatch.stop();
+    _baseSeconds += _stopwatch.elapsed.inSeconds;
+    _elapsedSeconds = _baseSeconds;
+    _stopwatch.reset();
     setState(() {
       _isRunning = false;
     });
+    _persistTiempoPeriodo();
   }
 
-  void _resetTimer() {
+  void _reiniciarPeriodo() {
+    final estabaCorriendo = _isRunning;
     _stopTimer();
     setState(() {
+      _periodoActual++;
+      _baseSeconds = 0;
       _elapsedSeconds = 0;
+      _stopwatch.reset();
     });
+    _persistTiempoPeriodo(segundos: 0);
+    if (estabaCorriendo) {
+      _startTimer();
+    }
   }
 
   String _formatDuration(int seconds) {
     final minutes = (seconds ~/ 60).toString().padLeft(2, '0');
     final secs = (seconds % 60).toString().padLeft(2, '0');
     return '$minutes:$secs';
+  }
+
+  void _initializeFromPartido(Partido partido) {
+    setState(() {
+      _partido = partido;
+      _golesLocal = partido.golesLocal;
+      _golesVisitante = partido.golesVisitante;
+      _periodoActual = partido.periodo;
+      _baseSeconds = partido.segundoPartido;
+      _elapsedSeconds = partido.segundoPartido;
+      _stopwatch = Stopwatch();
+      _hasStarted = partido.estado == 'EnJuego' || partido.estado == 'Finalizado';
+      _hasInitializedFromPartido = true;
+    });
+  }
+
+  void _sincronizarPartido(Partido partido) {
+    if (!_hasInitializedFromPartido || _partido?.id != partido.id) {
+      _initializeFromPartido(partido);
+      return;
+    }
+
+    setState(() {
+      _partido = partido;
+      _golesLocal = partido.golesLocal;
+      _golesVisitante = partido.golesVisitante;
+      _periodoActual = partido.periodo;
+      if (!_isRunning) {
+        _baseSeconds = partido.segundoPartido;
+        _elapsedSeconds = partido.segundoPartido;
+      }
+    });
+  }
+
+  Future<void> _persistTiempoPeriodo({int? segundos}) async {
+    await FirebaseFirestore.instance.collection('Partidos').doc(widget.partidoId).update({
+      'segundoPartido': segundos ?? _elapsedSeconds,
+      'periodo': _periodoActual,
+    });
+  }
+
+  Future<void> _actualizarMarcadorEnFirestore() async {
+    await FirebaseFirestore.instance.collection('Partidos').doc(widget.partidoId).update({
+      'golesLocal': _golesLocal,
+      'golesVisitante': _golesVisitante,
+    });
+  }
+
+  Future<void> _finalizarPartido() async {
+    if (_isRunning) {
+      _stopTimer();
+    }
+
+    await FirebaseFirestore.instance.collection('Partidos').doc(widget.partidoId).update({
+      'estado': 'Finalizado',
+      'segundoPartido': _elapsedSeconds,
+      'periodo': _periodoActual,
+    });
+
+    if (mounted) {
+      _mostrarSnackBar('Partido finalizado');
+    }
   }
 
   void _cargarConvocadosSiNecesario(Partido partido) {
@@ -121,7 +217,7 @@ class _PartidoEnJuegoScreenState extends State<PartidoEnJuegoScreen> {
     final evento = EventoPartido(
       id: eventoRef.id,
       timestamp: DateTime.now(),
-      periodo: _periodo,
+      periodo: _periodoActual,
       segundoPartido: _elapsedSeconds,
       equipoId: equipoId,
       jugadorId: _jugadorSeleccionado,
@@ -135,6 +231,16 @@ class _PartidoEnJuegoScreenState extends State<PartidoEnJuegoScreen> {
 
     try {
       await EventosService.addEvento(widget.partidoId, evento);
+      if (_selectedAccion == TipoAccion.gol) {
+        setState(() {
+          if (equipoId == partido.equipoLocalId) {
+            _golesLocal++;
+          } else if (equipoId == partido.equipoVisitanteId) {
+            _golesVisitante++;
+          }
+        });
+        await _actualizarMarcadorEnFirestore();
+      }
       _mostrarSnackBar('Evento registrado');
       setState(() {
         _jugadorSeleccionado = null;
@@ -174,6 +280,8 @@ class _PartidoEnJuegoScreenState extends State<PartidoEnJuegoScreen> {
 
           final partido =
               Partido.fromDoc(snapshot.data!.id, snapshot.data!.data()!);
+          WidgetsBinding.instance
+              .addPostFrameCallback((_) => _sincronizarPartido(partido));
           _cargarConvocadosSiNecesario(partido);
           _equipoSeleccionado ??= partido.equipoLocalId;
 
@@ -185,22 +293,33 @@ class _PartidoEnJuegoScreenState extends State<PartidoEnJuegoScreen> {
                 children: [
                   _PartidoHeader(
                     partido: partido,
-                    eventosStream: EventosService.streamEventos(widget.partidoId),
+                    golesLocal: _golesLocal,
+                    golesVisitante: _golesVisitante,
                   ),
                   const SizedBox(height: 16),
                   _Cronometro(
                     formato: _formatDuration(_elapsedSeconds),
-                    periodo: _periodo,
+                    periodo: _periodoActual,
                     isRunning: _isRunning,
                     onStart: _startTimer,
                     onStop: _stopTimer,
-                    onReset: _resetTimer,
+                    onReset: _reiniciarPeriodo,
                     onPeriodoChanged: (valor) {
-                      _resetTimer();
+                      if (valor < 1) return;
                       setState(() {
-                        _periodo = valor;
+                        _periodoActual = valor;
                       });
+                      _persistTiempoPeriodo();
                     },
+                  ),
+                  const SizedBox(height: 8),
+                  Align(
+                    alignment: Alignment.centerRight,
+                    child: FilledButton.icon(
+                      onPressed: _finalizarPartido,
+                      icon: const Icon(Icons.flag),
+                      label: const Text('Finalizar partido'),
+                    ),
                   ),
                   const SizedBox(height: 16),
                   _ConvocadosList(future: _convocadosFuture),
@@ -240,15 +359,19 @@ class _PartidoEnJuegoScreenState extends State<PartidoEnJuegoScreen> {
 class _PartidoHeader extends StatelessWidget {
   const _PartidoHeader({
     required this.partido,
-    required this.eventosStream,
+    required this.golesLocal,
+    required this.golesVisitante,
   });
 
   final Partido partido;
-  final Stream<List<EventoPartido>> eventosStream;
+  final int golesLocal;
+  final int golesVisitante;
 
   @override
   Widget build(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
+    final estadoColor = _estadoChipColor(partido.estado, colorScheme);
+
     return Card(
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
       child: Padding(
@@ -256,59 +379,66 @@ class _PartidoHeader extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(
-              '${partido.equipoLocalNombre} vs ${partido.equipoVisitanteNombre}',
-              style: const TextStyle(
-                fontSize: 18,
-                fontWeight: FontWeight.bold,
-              ),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Expanded(
+                  child: Text(
+                    '${partido.equipoLocalNombre} vs ${partido.equipoVisitanteNombre}',
+                    style: const TextStyle(
+                      fontSize: 18,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Chip(
+                  label: Text(partido.estado),
+                  backgroundColor: estadoColor,
+                )
+              ],
             ),
             const SizedBox(height: 4),
             Text(
               'Fecha: ${partido.fechaHora.day}/${partido.fechaHora.month}/${partido.fechaHora.year}  ${partido.fechaHora.hour.toString().padLeft(2, '0')}:${partido.fechaHora.minute.toString().padLeft(2, '0')}',
             ),
             const SizedBox(height: 12),
-            StreamBuilder<List<EventoPartido>>(
-              stream: eventosStream,
-              builder: (context, snapshot) {
-                final eventos = snapshot.data ?? [];
-                final golesLocal = eventos
-                    .where((e) =>
-                        e.tipoAccion == TipoAccion.gol &&
-                        e.equipoId == partido.equipoLocalId)
-                    .length;
-                final golesVisitante = eventos
-                    .where((e) =>
-                        e.tipoAccion == TipoAccion.gol &&
-                        e.equipoId == partido.equipoVisitanteId)
-                    .length;
-
-                return Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    _ScoreBox(
-                      equipo: partido.equipoLocalNombre,
-                      goles: golesLocal,
-                      color: colorScheme.primary,
-                    ),
-                    const Text(
-                      '-',
-                      style:
-                          TextStyle(fontSize: 32, fontWeight: FontWeight.bold),
-                    ),
-                    _ScoreBox(
-                      equipo: partido.equipoVisitanteNombre,
-                      goles: golesVisitante,
-                      color: colorScheme.secondary,
-                    ),
-                  ],
-                );
-              },
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                _ScoreBox(
+                  equipo: partido.equipoLocalNombre,
+                  goles: golesLocal,
+                  color: colorScheme.primary,
+                ),
+                const Text(
+                  '-',
+                  style: TextStyle(fontSize: 32, fontWeight: FontWeight.bold),
+                ),
+                _ScoreBox(
+                  equipo: partido.equipoVisitanteNombre,
+                  goles: golesVisitante,
+                  color: colorScheme.secondary,
+                ),
+              ],
             ),
+            const SizedBox(height: 8),
+            Text('Periodo actual: ${partido.periodo}'),
           ],
         ),
       ),
     );
+  }
+
+  Color _estadoChipColor(String estado, ColorScheme colorScheme) {
+    switch (estado) {
+      case 'EnJuego':
+        return Colors.green.shade200;
+      case 'Finalizado':
+        return Colors.red.shade200;
+      default:
+        return colorScheme.surfaceVariant;
+    }
   }
 }
 
@@ -421,23 +551,23 @@ class _Cronometro extends StatelessWidget {
               ],
             ),
             const SizedBox(height: 12),
-            Row(
+                Row(
               mainAxisAlignment: MainAxisAlignment.spaceEvenly,
               children: [
                 ElevatedButton.icon(
                   onPressed: isRunning ? null : onStart,
                   icon: const Icon(Icons.play_arrow),
-                  label: const Text('Start'),
+                  label: const Text('Iniciar'),
                 ),
                 ElevatedButton.icon(
                   onPressed: isRunning ? onStop : null,
                   icon: const Icon(Icons.pause),
-                  label: const Text('Stop'),
+                  label: const Text('Pausar'),
                 ),
                 ElevatedButton.icon(
                   onPressed: onReset,
                   icon: const Icon(Icons.restart_alt),
-                  label: const Text('Reset'),
+                  label: const Text('Reiniciar periodo'),
                 ),
               ],
             )

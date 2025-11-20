@@ -220,6 +220,10 @@ class _NuevoPartidoScreenState extends State<NuevoPartidoScreen> {
         jugadoresConvocados: jugadoresConvocados,
         staffConvocado: staffConvocado,
         estado: 'Programado',
+        golesLocal: 0,
+        golesVisitante: 0,
+        periodo: 1,
+        segundoPartido: 0,
         createdAt: ahora,
         updatedAt: ahora,
       );
