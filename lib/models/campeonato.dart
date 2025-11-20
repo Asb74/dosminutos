@@ -9,6 +9,9 @@ class Campeonato {
   final String sexo;
   final String tipo;
   final bool activo;
+  final String? organizador;
+  final String? nivel;
+  final String? color;
   final String? notas;
 
   Campeonato({
@@ -22,6 +25,9 @@ class Campeonato {
     required this.sexo,
     required this.tipo,
     this.activo = true,
+    this.organizador,
+    this.nivel,
+    this.color,
     this.notas,
   });
 
@@ -36,6 +42,9 @@ class Campeonato {
       'sexo': sexo,
       'tipo': tipo,
       'activo': activo,
+      'organizador': organizador,
+      'nivel': nivel,
+      'color': color,
       'notas': notas,
     };
   }
@@ -52,6 +61,9 @@ class Campeonato {
       sexo: data['sexo'] as String? ?? '',
       tipo: data['tipo'] as String? ?? '',
       activo: data['activo'] as bool? ?? true,
+      organizador: data['organizador'] as String?,
+      nivel: data['nivel'] as String?,
+      color: data['color'] as String?,
       notas: data['notas'] as String?,
     );
   }

@@ -77,6 +77,13 @@ class MaestrosScreen extends StatelessWidget {
               colorScheme: colorScheme,
               onTap: () => Navigator.pushNamed(context, '/temporadas'),
             ),
+            _MaestroCard(
+              title: 'Campeonatos',
+              description: 'Ligas, copas y torneos',
+              icon: Icons.emoji_events_outlined,
+              colorScheme: colorScheme,
+              onTap: () => Navigator.pushNamed(context, '/campeonatos'),
+            ),
           ],
         ),
       ),
