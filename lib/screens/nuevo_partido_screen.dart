@@ -53,6 +53,7 @@ class _NuevoPartidoScreenState extends State<NuevoPartidoScreen> {
         .collection('Equipos')
         .where('categoria', isEqualTo: _selectedCampeonato!.categoria)
         .where('sexo', isEqualTo: _selectedCampeonato!.sexo)
+        .where('activo', isEqualTo: true)
         .orderBy('nombre')
         .snapshots();
   }
