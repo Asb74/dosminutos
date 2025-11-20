@@ -1,6 +1,7 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 
+import '../models/club.dart';
 import '../models/equipo.dart';
 
 class EquiposScreen extends StatelessWidget {
@@ -11,6 +12,10 @@ class EquiposScreen extends StatelessWidget {
 
   Stream<QuerySnapshot<Map<String, dynamic>>> _equiposStream() {
     return _equiposRef.orderBy('nombre').snapshots();
+  }
+
+  Stream<QuerySnapshot<Map<String, dynamic>>> _clubesStream() {
+    return FirebaseFirestore.instance.collection('Clubes').orderBy('apodo').snapshots();
   }
 
   static const List<String> _categorias = [
@@ -32,106 +37,156 @@ class EquiposScreen extends StatelessWidget {
     final nombreController = TextEditingController(text: equipo?.nombre ?? '');
     String? categoria = equipo?.categoria.isNotEmpty == true ? equipo!.categoria : null;
     String? sexo = equipo?.sexo.isNotEmpty == true ? equipo!.sexo : null;
-    final clubController = TextEditingController(text: equipo?.club ?? '');
+    String? clubId = equipo?.clubId;
+    String? clubNombre = equipo?.clubNombre;
     final notasController = TextEditingController(text: equipo?.notas ?? '');
 
     await showDialog(
       context: context,
       builder: (context) {
-        final colorScheme = Theme.of(context).colorScheme;
-        return AlertDialog(
-          title: Text(equipo == null ? 'Crear equipo' : 'Editar equipo'),
-          content: Form(
-            key: formKey,
-            child: SingleChildScrollView(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  TextFormField(
-                    controller: nombreController,
-                    decoration: const InputDecoration(labelText: 'Nombre'),
-                    autofocus: true,
-                    validator: (value) {
-                      if (value == null || value.trim().isEmpty) {
-                        return 'El nombre es requerido';
-                      }
-                      return null;
-                    },
+        List<Club> clubesDisponibles = [];
+
+        return StatefulBuilder(
+          builder: (context, setState) {
+            return AlertDialog(
+              title: Text(equipo == null ? 'Crear equipo' : 'Editar equipo'),
+              content: Form(
+                key: formKey,
+                child: SingleChildScrollView(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      TextFormField(
+                        controller: nombreController,
+                        decoration: const InputDecoration(labelText: 'Nombre'),
+                        autofocus: true,
+                        validator: (value) {
+                          if (value == null || value.trim().isEmpty) {
+                            return 'El nombre es requerido';
+                          }
+                          return null;
+                        },
+                      ),
+                      const SizedBox(height: 12),
+                      DropdownButtonFormField<String>(
+                        value: categoria,
+                        decoration: const InputDecoration(labelText: 'Categoría'),
+                        items: _categorias
+                            .map((cat) => DropdownMenuItem(value: cat, child: Text(cat)))
+                            .toList(),
+                        onChanged: (value) => setState(() => categoria = value),
+                        validator: (value) => value == null || value.isEmpty
+                            ? 'Selecciona una categoría'
+                            : null,
+                      ),
+                      const SizedBox(height: 12),
+                      DropdownButtonFormField<String>(
+                        value: sexo,
+                        decoration: const InputDecoration(labelText: 'Sexo'),
+                        items: _sexos
+                            .map((s) => DropdownMenuItem(value: s, child: Text(s)))
+                            .toList(),
+                        onChanged: (value) => setState(() => sexo = value),
+                        validator: (value) =>
+                            value == null || value.isEmpty ? 'Selecciona el sexo' : null,
+                      ),
+                      const SizedBox(height: 12),
+                      StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
+                        stream: _clubesStream(),
+                        builder: (context, clubSnapshot) {
+                          if (clubSnapshot.connectionState == ConnectionState.waiting) {
+                            return const Padding(
+                              padding: EdgeInsets.symmetric(vertical: 8.0),
+                              child: LinearProgressIndicator(),
+                            );
+                          }
+
+                          if (clubSnapshot.hasError) {
+                            return Text('Error al cargar clubes: ${clubSnapshot.error}');
+                          }
+
+                          clubesDisponibles = clubSnapshot.data?.docs
+                                  .map((d) => Club.fromDoc(d.id, d.data()))
+                                  .toList() ??
+                              [];
+
+                          if (clubId != null &&
+                              clubesDisponibles.every((club) => club.id != clubId)) {
+                            clubId = null;
+                            clubNombre = null;
+                          }
+
+                          return DropdownButtonFormField<String>(
+                            value: clubId,
+                            decoration: const InputDecoration(
+                              labelText: 'Club (opcional)',
+                            ),
+                            items: clubesDisponibles
+                                .map(
+                                  (club) => DropdownMenuItem(
+                                    value: club.id,
+                                    child: Text(club.apodo),
+                                  ),
+                                )
+                                .toList(),
+                            onChanged: (value) {
+                              setState(() {
+                                clubId = value;
+                                clubNombre = value == null
+                                    ? null
+                                    : clubesDisponibles
+                                        .firstWhere((club) => club.id == value)
+                                        .apodo;
+                              });
+                            },
+                          );
+                        },
+                      ),
+                      const SizedBox(height: 12),
+                      TextFormField(
+                        controller: notasController,
+                        decoration: const InputDecoration(labelText: 'Notas (opcional)'),
+                        maxLines: 2,
+                      ),
+                    ],
                   ),
-                  const SizedBox(height: 12),
-                  DropdownButtonFormField<String>(
-                    value: categoria,
-                    decoration: const InputDecoration(labelText: 'Categoría'),
-                    items: _categorias
-                        .map((cat) => DropdownMenuItem(value: cat, child: Text(cat)))
-                        .toList(),
-                    onChanged: (value) => categoria = value,
-                    validator: (value) =>
-                        value == null || value.isEmpty ? 'Selecciona una categoría' : null,
-                  ),
-                  const SizedBox(height: 12),
-                  DropdownButtonFormField<String>(
-                    value: sexo,
-                    decoration: const InputDecoration(labelText: 'Sexo'),
-                    items: _sexos
-                        .map((s) => DropdownMenuItem(value: s, child: Text(s)))
-                        .toList(),
-                    onChanged: (value) => sexo = value,
-                    validator: (value) =>
-                        value == null || value.isEmpty ? 'Selecciona el sexo' : null,
-                  ),
-                  const SizedBox(height: 12),
-                  TextFormField(
-                    controller: clubController,
-                    decoration: const InputDecoration(labelText: 'Club (opcional)'),
-                  ),
-                  const SizedBox(height: 12),
-                  TextFormField(
-                    controller: notasController,
-                    decoration: const InputDecoration(labelText: 'Notas (opcional)'),
-                    maxLines: 2,
-                  ),
-                ],
+                ),
               ),
-            ),
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.of(context).pop(),
-              child: const Text('Cancelar'),
-            ),
-            ElevatedButton(
-              onPressed: () async {
-                if (!formKey.currentState!.validate()) return;
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.of(context).pop(),
+                  child: const Text('Cancelar'),
+                ),
+                ElevatedButton(
+                  onPressed: () async {
+                    if (!formKey.currentState!.validate()) return;
 
-                final nuevoEquipo = Equipo(
-                  nombre: nombreController.text.trim(),
-                  categoria: categoria ?? '',
-                  sexo: sexo ?? '',
-                  club:
-                      clubController.text.trim().isEmpty ? null : clubController.text.trim(),
-                  notas: notasController.text.trim().isEmpty
-                      ? null
-                      : notasController.text.trim(),
-                  id: equipo?.id ?? '',
-                  activo: equipo?.activo ?? true,
-                );
+                    final nuevoEquipo = Equipo(
+                      nombre: nombreController.text.trim(),
+                      categoria: categoria ?? '',
+                      sexo: sexo ?? '',
+                      clubId: clubId,
+                      clubNombre: clubNombre,
+                      notas: notasController.text.trim().isEmpty
+                          ? null
+                          : notasController.text.trim(),
+                      id: equipo?.id ?? '',
+                      activo: equipo?.activo ?? true,
+                    );
 
-                if (equipo == null) {
-                  await _equiposRef.add(nuevoEquipo.toMap());
-                } else {
-                  await _equiposRef.doc(equipo.id).update(nuevoEquipo.toMap());
-                }
+                    if (equipo == null) {
+                      await _equiposRef.add(nuevoEquipo.toMap());
+                    } else {
+                      await _equiposRef.doc(equipo.id).update(nuevoEquipo.toMap());
+                    }
 
-                if (context.mounted) Navigator.of(context).pop();
-              },
-              style: ElevatedButton.styleFrom(
-                backgroundColor: colorScheme.primary,
-                foregroundColor: colorScheme.onPrimary,
-              ),
-              child: Text(equipo == null ? 'Crear' : 'Guardar'),
-            ),
-          ],
+                    if (context.mounted) Navigator.of(context).pop();
+                  },
+                  child: Text(equipo == null ? 'Crear' : 'Guardar'),
+                ),
+              ],
+            );
+          },
         );
       },
     );
@@ -206,7 +261,8 @@ class EquiposScreen extends StatelessWidget {
                 final subtitleParts = [
                   if (equipo.categoria.trim().isNotEmpty) 'Categoría: ${equipo.categoria}',
                   if (equipo.sexo.trim().isNotEmpty) 'Sexo: ${equipo.sexo}',
-                  if ((equipo.club ?? '').trim().isNotEmpty) 'Club: ${equipo.club}',
+                  if ((equipo.clubNombre ?? '').trim().isNotEmpty)
+                    'Club: ${equipo.clubNombre}',
                 ];
 
                 return Card(
