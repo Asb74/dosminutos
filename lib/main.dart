@@ -12,6 +12,8 @@ import 'screens/jugadores_equipos_screen.dart';
 import 'screens/login_screen.dart';
 import 'screens/maestros_screen.dart';
 import 'screens/nuevo_partido_screen.dart';
+import 'screens/staff_equipo_screen.dart';
+import 'screens/staff_equipos_screen.dart';
 import 'screens/splash_screen.dart';
 import 'screens/temporadas_screen.dart';
 
@@ -75,6 +77,7 @@ class DosMinutosApp extends StatelessWidget {
         '/equipos': (context) => const EquiposScreen(),
         '/maestros': (context) => const MaestrosScreen(),
         '/arbitros': (context) => const ArbitrosScreen(),
+        '/staff': (context) => const StaffEquiposScreen(),
         '/temporadas': (context) => const TemporadasScreen(),
       },
     );
