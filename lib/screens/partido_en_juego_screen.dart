@@ -325,7 +325,12 @@ class _PartidoEnJuegoScreenState extends State<PartidoEnJuegoScreen> {
 
           final data = snapshot.data!.data()!;
           final partido = Partido.fromDoc(snapshot.data!.id, data);
-          _syncPartido(partido, data);
+
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            if (mounted) {
+              _syncPartido(partido, data);
+            }
+          });
 
           return SingleChildScrollView(
             padding: const EdgeInsets.all(16),
