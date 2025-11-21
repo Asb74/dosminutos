@@ -20,8 +20,10 @@ class Partido {
   final String? arbitro2Id;
   final String? mesa1Id;
   final String? mesa2Id;
-  final List<int> jugadoresConvocados;
-  final List<int> staffConvocado;
+  final List<Map<String, dynamic>> convocadosLocal;
+  final List<Map<String, dynamic>> convocadosVisitante;
+  final List<int> staffConvocadoLocal;
+  final List<int> staffConvocadoVisitante;
   final String estado;
   final int golesLocal;
   final int golesVisitante;
@@ -50,8 +52,10 @@ class Partido {
     this.arbitro2Id,
     this.mesa1Id,
     this.mesa2Id,
-    this.jugadoresConvocados = const [],
-    this.staffConvocado = const [],
+    this.convocadosLocal = const [],
+    this.convocadosVisitante = const [],
+    this.staffConvocadoLocal = const [],
+    this.staffConvocadoVisitante = const [],
     this.estado = 'Programado',
     this.golesLocal = 0,
     this.golesVisitante = 0,
@@ -81,8 +85,10 @@ class Partido {
       'arbitro2Id': arbitro2Id,
       'mesa1Id': mesa1Id,
       'mesa2Id': mesa2Id,
-      'jugadoresConvocados': jugadoresConvocados,
-      'staffConvocado': staffConvocado,
+      'convocadosLocal': convocadosLocal,
+      'convocadosVisitante': convocadosVisitante,
+      'staffConvocadoLocal': staffConvocadoLocal,
+      'staffConvocadoVisitante': staffConvocadoVisitante,
       'estado': estado,
       'golesLocal': golesLocal,
       'golesVisitante': golesVisitante,
@@ -110,6 +116,40 @@ class Partido {
       return [];
     }
 
+    List<Map<String, dynamic>> _parseConvocados(Object? raw) {
+      final list = (raw as List<dynamic>? ?? []);
+      return list
+          .whereType<Map<String, dynamic>>()
+          .map((e) => Map<String, dynamic>.from(e))
+          .toList();
+    }
+
+    List<Map<String, dynamic>> _fallbackConvocados(List<int> dorsales) {
+      return dorsales
+          .map(
+            (dorsal) => {
+              'dorsal': dorsal,
+              'nombre': '',
+              'posicion': '',
+              'enJuego': false,
+            },
+          )
+          .toList();
+    }
+
+    final jugadoresConvocadosAntiguo =
+        parseIntList(data['jugadoresConvocados']);
+
+    var convocadosLocal = _parseConvocados(data['convocadosLocal']);
+    if (convocadosLocal.isEmpty && jugadoresConvocadosAntiguo.isNotEmpty) {
+      convocadosLocal = _fallbackConvocados(jugadoresConvocadosAntiguo);
+    }
+
+    var convocadosVisitante = _parseConvocados(data['convocadosVisitante']);
+    if (convocadosVisitante.isEmpty && jugadoresConvocadosAntiguo.isNotEmpty) {
+      convocadosVisitante = _fallbackConvocados(jugadoresConvocadosAntiguo);
+    }
+
     return Partido(
       id: id,
       idPartido: (data['idPartido'] as num?)?.toInt() ?? 0,
@@ -130,8 +170,10 @@ class Partido {
       arbitro2Id: data['arbitro2Id'] as String?,
       mesa1Id: data['mesa1Id'] as String?,
       mesa2Id: data['mesa2Id'] as String?,
-      jugadoresConvocados: parseIntList(data['jugadoresConvocados']),
-      staffConvocado: parseIntList(data['staffConvocado']),
+      convocadosLocal: convocadosLocal,
+      convocadosVisitante: convocadosVisitante,
+      staffConvocadoLocal: parseIntList(data['staffConvocadoLocal']),
+      staffConvocadoVisitante: parseIntList(data['staffConvocadoVisitante']),
       estado: data['estado'] as String? ?? 'Programado',
       golesLocal: (data['golesLocal'] as num?)?.toInt() ?? 0,
       golesVisitante: (data['golesVisitante'] as num?)?.toInt() ?? 0,
