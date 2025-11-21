@@ -22,8 +22,8 @@ class Partido {
   final String? mesa2Id;
   final List<Map<String, dynamic>> convocadosLocal;
   final List<Map<String, dynamic>> convocadosVisitante;
-  final List<int> staffConvocadoLocal;
-  final List<int> staffConvocadoVisitante;
+  final List<Map<String, dynamic>> staffConvocadoLocal;
+  final List<Map<String, dynamic>> staffConvocadoVisitante;
   final String estado;
   final int golesLocal;
   final int golesVisitante;
@@ -106,48 +106,12 @@ class Partido {
       return DateTime.now();
     }
 
-    List<int> parseIntList(dynamic value) {
-      if (value is Iterable) {
-        return value
-            .map((e) => (e as num?)?.toInt())
-            .whereType<int>()
-            .toList();
-      }
-      return [];
-    }
-
     List<Map<String, dynamic>> _parseConvocados(Object? raw) {
       final list = (raw as List<dynamic>? ?? []);
       return list
           .whereType<Map<String, dynamic>>()
           .map((e) => Map<String, dynamic>.from(e))
           .toList();
-    }
-
-    List<Map<String, dynamic>> _fallbackConvocados(List<int> dorsales) {
-      return dorsales
-          .map(
-            (dorsal) => {
-              'dorsal': dorsal,
-              'nombre': '',
-              'posicion': '',
-              'enJuego': false,
-            },
-          )
-          .toList();
-    }
-
-    final jugadoresConvocadosAntiguo =
-        parseIntList(data['jugadoresConvocados']);
-
-    var convocadosLocal = _parseConvocados(data['convocadosLocal']);
-    if (convocadosLocal.isEmpty && jugadoresConvocadosAntiguo.isNotEmpty) {
-      convocadosLocal = _fallbackConvocados(jugadoresConvocadosAntiguo);
-    }
-
-    var convocadosVisitante = _parseConvocados(data['convocadosVisitante']);
-    if (convocadosVisitante.isEmpty && jugadoresConvocadosAntiguo.isNotEmpty) {
-      convocadosVisitante = _fallbackConvocados(jugadoresConvocadosAntiguo);
     }
 
     return Partido(
@@ -170,10 +134,10 @@ class Partido {
       arbitro2Id: data['arbitro2Id'] as String?,
       mesa1Id: data['mesa1Id'] as String?,
       mesa2Id: data['mesa2Id'] as String?,
-      convocadosLocal: convocadosLocal,
-      convocadosVisitante: convocadosVisitante,
-      staffConvocadoLocal: parseIntList(data['staffConvocadoLocal']),
-      staffConvocadoVisitante: parseIntList(data['staffConvocadoVisitante']),
+      convocadosLocal: _parseConvocados(data['convocadosLocal']),
+      convocadosVisitante: _parseConvocados(data['convocadosVisitante']),
+      staffConvocadoLocal: _parseConvocados(data['staffConvocadoLocal']),
+      staffConvocadoVisitante: _parseConvocados(data['staffConvocadoVisitante']),
       estado: data['estado'] as String? ?? 'Programado',
       golesLocal: (data['golesLocal'] as num?)?.toInt() ?? 0,
       golesVisitante: (data['golesVisitante'] as num?)?.toInt() ?? 0,
