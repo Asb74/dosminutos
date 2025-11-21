@@ -46,33 +46,30 @@ class _CambiosScreenState extends State<CambiosScreen> {
             }
 
             final data = snapshot.data!.data()!;
-            final List<dynamic> convocadosRaw = widget.equipo == 'local'
+            final convocadosRaw = widget.equipo == 'local'
                 ? (data['convocadosLocal'] ?? [])
                 : (data['convocadosVisitante'] ?? []);
 
-            final jugadores = convocadosRaw
-                .map(
-                  (e) => JugadorConvocado.fromMap(
-                    Map<String, dynamic>.from(e as Map<dynamic, dynamic>),
-                  ),
-                )
+            final List<Map<String, dynamic>> jugadores = convocadosRaw
+                .map((e) => Map<String, dynamic>.from(e as Map<dynamic, dynamic>))
                 .toList();
 
             if (jugadores.isEmpty) {
               return const Center(child: Text('No hay jugadores disponibles.'));
             }
 
-            final jugadorActual = jugadores.firstWhere(
-              (j) => j.dorsal == widget.dorsal,
-              orElse: () => jugadores.firstWhere(
-                (j) => j.enJuego,
-                orElse: () => jugadores.first,
-              ),
+            final dorsalActual = widget.dorsal;
+            final jugadorActualIndex = jugadores.indexWhere(
+              (j) => (j['dorsal'] as num?)?.toInt() == dorsalActual,
             );
+            final jugadorActual =
+                jugadorActualIndex >= 0 ? jugadores[jugadorActualIndex] : null;
 
-            final banquillo = jugadores
-                .where((j) => !j.enJuego && j.dorsal != jugadorActual.dorsal)
-                .toList();
+            final banquillo = jugadores.where((j) {
+              final enJuego = (j['enJuego'] ?? false) == true;
+              final dorsal = (j['dorsal'] as num?)?.toInt();
+              return !enJuego && dorsal != dorsalActual;
+            }).toList();
 
             return Padding(
               padding: const EdgeInsets.all(16),
@@ -113,57 +110,64 @@ class _CambiosScreenState extends State<CambiosScreen> {
                                   separatorBuilder: (_, __) => const Divider(height: 16),
                                   itemBuilder: (context, index) {
                                     final jugador = banquillo[index];
-                                    return InkWell(
-                                      onTap: () =>
-                                          _realizarCambio(jugador, jugadores),
-                                      borderRadius: BorderRadius.circular(12),
-                                      child: Padding(
-                                        padding: const EdgeInsets.symmetric(
-                                          vertical: 8,
-                                          horizontal: 4,
+                                      return InkWell(
+                                        onTap: () => _hacerCambio(
+                                          jugador,
+                                          jugadores,
+                                          jugadorActualIndex,
                                         ),
-                                        child: Row(
-                                          children: [
-                                            CircleAvatar(
-                                              radius: 24,
-                                              backgroundColor: colorScheme.primary,
-                                              child: Text(
-                                                jugador.dorsal.toString(),
-                                                style: TextStyle(
-                                                  color: colorScheme.onPrimary,
-                                                  fontWeight: FontWeight.bold,
-                                                  fontSize: 18,
+                                        borderRadius: BorderRadius.circular(12),
+                                        child: Padding(
+                                          padding: const EdgeInsets.symmetric(
+                                            vertical: 8,
+                                            horizontal: 4,
+                                          ),
+                                          child: Row(
+                                            children: [
+                                              CircleAvatar(
+                                                radius: 24,
+                                                backgroundColor: colorScheme.primary,
+                                                child: Text(
+                                                  (jugador['dorsal'] as num?)
+                                                          ?.toInt()
+                                                          .toString() ??
+                                                      '-',
+                                                  style: TextStyle(
+                                                    color: colorScheme.onPrimary,
+                                                    fontWeight: FontWeight.bold,
+                                                    fontSize: 18,
+                                                  ),
                                                 ),
                                               ),
-                                            ),
-                                            const SizedBox(width: 12),
-                                            Expanded(
-                                              child: Column(
-                                                crossAxisAlignment:
-                                                    CrossAxisAlignment.start,
-                                                children: [
-                                                  Text(
-                                                    jugador.nombre.toUpperCase(),
-                                                    style: const TextStyle(
-                                                      fontWeight: FontWeight.bold,
-                                                      fontSize: 16,
+                                              const SizedBox(width: 12),
+                                              Expanded(
+                                                child: Column(
+                                                  crossAxisAlignment:
+                                                      CrossAxisAlignment.start,
+                                                  children: [
+                                                    Text(
+                                                      (jugador['nombre'] as String? ?? '')
+                                                          .toUpperCase(),
+                                                      style: const TextStyle(
+                                                        fontWeight: FontWeight.bold,
+                                                        fontSize: 16,
+                                                      ),
                                                     ),
-                                                  ),
-                                                  const SizedBox(height: 4),
-                                                  Text(
-                                                    jugador.posicion,
-                                                    style: TextStyle(
-                                                      color: Colors.grey.shade700,
+                                                    const SizedBox(height: 4),
+                                                    Text(
+                                                      jugador['posicion'] as String? ?? '',
+                                                      style: TextStyle(
+                                                        color: Colors.grey.shade700,
+                                                      ),
                                                     ),
-                                                  ),
-                                                ],
+                                                  ],
+                                                ),
                                               ),
-                                            ),
-                                            const Icon(Icons.chevron_right),
-                                          ],
+                                              const Icon(Icons.chevron_right),
+                                            ],
+                                          ),
                                         ),
-                                      ),
-                                    );
+                                      );
                                   },
                                 ),
                               ),
@@ -181,72 +185,38 @@ class _CambiosScreenState extends State<CambiosScreen> {
     );
   }
 
-  Future<void> _realizarCambio(
-    JugadorConvocado entra,
-    List<JugadorConvocado> jugadores,
+  Future<void> _hacerCambio(
+    Map<String, dynamic> jugadorEntrante,
+    List<Map<String, dynamic>> jugadores,
+    int? jugadorActualIndex,
   ) async {
-    final docRef = FirebaseFirestore.instance
+    if (jugadorActualIndex == null || jugadorActualIndex < 0) return;
+
+    final updated = jugadores
+        .map((j) => Map<String, dynamic>.from(j))
+        .toList(growable: false);
+
+    updated[jugadorActualIndex]['enJuego'] = false;
+
+    final dorsalEntrante = (jugadorEntrante['dorsal'] as num?)?.toInt();
+    final idxEntrante = updated.indexWhere(
+      (j) => (j['dorsal'] as num?)?.toInt() == dorsalEntrante,
+    );
+
+    if (idxEntrante >= 0) {
+      updated[idxEntrante]['enJuego'] = true;
+    }
+
+    final campo =
+        widget.equipo == 'local' ? 'convocadosLocal' : 'convocadosVisitante';
+
+    await FirebaseFirestore.instance
         .collection('Partidos')
-        .doc(widget.partidoId);
-
-    final actualIndex = jugadores.indexWhere((j) => j.dorsal == widget.dorsal);
-    final entraIndex = jugadores.indexWhere((j) => j.dorsal == entra.dorsal);
-
-    if (actualIndex == -1 || entraIndex == -1) return;
-
-    final updated = List<JugadorConvocado>.from(jugadores);
-    updated[actualIndex] = JugadorConvocado(
-      dorsal: updated[actualIndex].dorsal,
-      nombre: updated[actualIndex].nombre,
-      posicion: updated[actualIndex].posicion,
-      enJuego: false,
-    );
-    updated[entraIndex] = JugadorConvocado(
-      dorsal: updated[entraIndex].dorsal,
-      nombre: updated[entraIndex].nombre,
-      posicion: updated[entraIndex].posicion,
-      enJuego: true,
-    );
-
-    await docRef.update({
-      widget.equipo == 'local'
-          ? 'convocadosLocal'
-          : 'convocadosVisitante':
-          updated.map((j) => j.toMap()).toList(),
+        .doc(widget.partidoId)
+        .update({
+      campo: updated,
     });
 
     if (mounted) Navigator.of(context).pop();
-  }
-}
-
-class JugadorConvocado {
-  final int dorsal;
-  final String nombre;
-  final String posicion;
-  final bool enJuego;
-
-  JugadorConvocado({
-    required this.dorsal,
-    required this.nombre,
-    required this.posicion,
-    required this.enJuego,
-  });
-
-  factory JugadorConvocado.fromMap(Map<String, dynamic> map) {
-    return JugadorConvocado(
-      dorsal: (map['dorsal'] as num?)?.toInt() ?? 0,
-      nombre: (map['nombre'] as String?) ?? '',
-      posicion: (map['posicion'] as String?) ?? '',
-      enJuego: map['enJuego'] as bool? ?? false,
-    );
-  }
-
-  Map<String, dynamic> toMap() {
-    return {
-      'dorsal': dorsal,
-      'nombre': nombre,
-      'posicion': posicion,
-      'enJuego': enJuego,
-    };
   }
 }
