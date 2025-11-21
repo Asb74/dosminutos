@@ -127,6 +127,53 @@ class _NuevoPartidoScreenState extends State<NuevoPartidoScreen> {
         .toList();
   }
 
+  Future<List<Map<String, dynamic>>> _obtenerConvocadosEquipo(
+    Equipo equipo,
+  ) async {
+    if (_selectedCampeonato == null) return [];
+
+    final query = await FirebaseFirestore.instance
+        .collection('Jugadores')
+        .where('equipoId', isEqualTo: equipo.id)
+        .where('categoria', isEqualTo: _selectedCampeonato!.categoria)
+        .where('convocado', isEqualTo: true)
+        .where('lesionado', isEqualTo: false)
+        .where('sancionado', isEqualTo: false)
+        .where('activo', isEqualTo: true)
+        .get();
+
+    return query.docs.map((doc) {
+      final data = doc.data();
+      final dorsal = (data['dorsal'] as num?) ?? (data['idJugador'] as num?);
+
+      return {
+        'dorsal': dorsal?.toInt() ?? 0,
+        'nombre': data['nombre'] as String? ?? '',
+        'posicion': data['posicion'] as String? ?? '',
+        'enJuego': false,
+      };
+    }).toList();
+  }
+
+  List<Map<String, dynamic>> _prepararConvocados(
+    List<Map<String, dynamic>> jugadores,
+  ) {
+    final conv = jugadores
+        .map((j) => {
+              'dorsal': (j['dorsal'] as num?)?.toInt() ?? 0,
+              'nombre': j['nombre'] as String? ?? '',
+              'posicion': j['posicion'] as String? ?? '',
+              'enJuego': false,
+            })
+        .toList();
+
+    for (int i = 0; i < conv.length && i < 7; i++) {
+      conv[i]['enJuego'] = true;
+    }
+
+    return conv;
+  }
+
   Future<void> _autocompletarPabellonDesdeClub(Equipo? equipoLocal) async {
     if (equipoLocal?.clubId == null || equipoLocal!.clubId!.isEmpty) return;
     if (_pabellonController.text.trim().isNotEmpty) return;
@@ -194,6 +241,15 @@ class _NuevoPartidoScreenState extends State<NuevoPartidoScreen> {
 
       final jugadoresConvocados = await _obtenerConvocadosJugadores();
       final staffConvocado = await _obtenerConvocadosStaff();
+      final convocadosLocalCompleto = _selectedEquipoLocal == null
+          ? <Map<String, dynamic>>[]
+          : await _obtenerConvocadosEquipo(_selectedEquipoLocal!);
+      final convocadosVisitanteCompleto = _selectedEquipoVisitante == null
+          ? <Map<String, dynamic>>[]
+          : await _obtenerConvocadosEquipo(_selectedEquipoVisitante!);
+
+      final convLocal = _prepararConvocados(convocadosLocalCompleto);
+      final convVis = _prepararConvocados(convocadosVisitanteCompleto);
 
       final ahora = DateTime.now();
       final partido = Partido(
@@ -230,7 +286,11 @@ class _NuevoPartidoScreenState extends State<NuevoPartidoScreen> {
 
       final docRef = await FirebaseFirestore.instance
           .collection('Partidos')
-          .add(partido.toMap());
+          .add({
+        ...partido.toMap(),
+        'convocadosLocal': convLocal,
+        'convocadosVisitante': convVis,
+      });
 
       if (mounted) {
         await _mostrarDialogoExito(docRef.id);
