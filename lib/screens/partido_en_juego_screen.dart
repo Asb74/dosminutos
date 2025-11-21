@@ -54,35 +54,21 @@ class _PartidoEnJuegoScreenState extends State<PartidoEnJuegoScreen> {
           .toList();
 
   @override
-  void initState() {
-    super.initState();
-    _cargarPartidoInicial();
-  }
-
-  @override
   void dispose() {
     _timer?.cancel();
     super.dispose();
   }
 
-  Future<void> _cargarPartidoInicial() async {
-    final doc = await FirebaseFirestore.instance
-        .collection('Partidos')
-        .doc(widget.partidoId)
-        .get();
+  void _initFromSnapshot(Partido partido, Map<String, dynamic> data) {
+    if (_initialized || !mounted) return;
 
-    if (!doc.exists) return;
-    final data = doc.data()!;
-    final partido = Partido.fromDoc(doc.id, data);
-
-    if (!mounted) return;
+    final segundos = (data['segundoPartido'] as num?)?.toInt() ?? 0;
 
     setState(() {
       _partido = partido;
       _golesLocal = partido.golesLocal;
       _golesVisitante = partido.golesVisitante;
       _periodoActual = (data['periodoActual'] as String?) ?? _periodoActual;
-      final segundos = (data['segundoPartido'] as num?)?.toInt() ?? 0;
       _elapsed = Duration(seconds: segundos);
       _equipoSeleccionado ??= 'local';
       _initialized = true;
@@ -312,18 +298,37 @@ class _PartidoEnJuegoScreenState extends State<PartidoEnJuegoScreen> {
   }
 
   void _syncPartido(Partido partido, Map<String, dynamic> data) {
-    if (!mounted) return;
+    if (!mounted || _isPlaying) return;
 
-    setState(() {
-      _partido = partido;
-      _golesLocal = partido.golesLocal;
-      _golesVisitante = partido.golesVisitante;
-      _periodoActual = (data['periodoActual'] as String?) ?? _periodoActual;
-      final segundos = (data['segundoPartido'] as num?)?.toInt();
-      if (segundos != null) {
-        _elapsed = Duration(seconds: segundos);
-      }
-      _equipoSeleccionado ??= 'local';
+    final segundos = (data['segundoPartido'] as num?)?.toInt();
+    final nuevoPeriodo = (data['periodoActual'] as String?) ?? _periodoActual;
+
+    final shouldUpdateTiempo =
+        segundos != null && _elapsed.inSeconds != segundos && !_isPlaying;
+    final shouldUpdatePeriodo = nuevoPeriodo != _periodoActual;
+    final shouldUpdateGoles = partido.golesLocal != _golesLocal ||
+        partido.golesVisitante != _golesVisitante;
+
+    if (!shouldUpdateTiempo && !shouldUpdatePeriodo && !shouldUpdateGoles) {
+      return;
+    }
+
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      setState(() {
+        _partido = partido;
+        if (shouldUpdateGoles) {
+          _golesLocal = partido.golesLocal;
+          _golesVisitante = partido.golesVisitante;
+        }
+        if (shouldUpdatePeriodo) {
+          _periodoActual = nuevoPeriodo;
+        }
+        if (shouldUpdateTiempo && !_isPlaying && segundos != null) {
+          _elapsed = Duration(seconds: segundos);
+        }
+        _equipoSeleccionado ??= 'local';
+      });
     });
   }
 
@@ -333,127 +338,137 @@ class _PartidoEnJuegoScreenState extends State<PartidoEnJuegoScreen> {
       appBar: AppBar(
         title: const Text('Partido en juego'),
       ),
-      body: !_initialized
-          ? const Center(child: CircularProgressIndicator())
-          : StreamBuilder<DocumentSnapshot<Map<String, dynamic>>>(
-              stream: FirebaseFirestore.instance
-                  .collection('Partidos')
-                  .doc(widget.partidoId)
-                  .snapshots(),
-              builder: (context, snapshot) {
-                if (snapshot.connectionState == ConnectionState.waiting) {
-                  return const Center(child: CircularProgressIndicator());
-                }
+      body: StreamBuilder<DocumentSnapshot<Map<String, dynamic>>>(
+        stream: FirebaseFirestore.instance
+            .collection('Partidos')
+            .doc(widget.partidoId)
+            .snapshots(),
+        builder: (context, snapshot) {
+          if (snapshot.connectionState == ConnectionState.waiting &&
+              !_initialized) {
+            return const Center(child: CircularProgressIndicator());
+          }
 
-                if (!snapshot.hasData || !snapshot.data!.exists) {
-                  return const Center(
-                    child: Text('No se encontró la información del partido.'),
-                  );
-                }
+          if (snapshot.hasError) {
+            return Center(child: Text('Error: ${snapshot.error}'));
+          }
 
-                final data = snapshot.data!.data()!;
-                final partido = Partido.fromDoc(snapshot.data!.id, data);
+          if (!snapshot.hasData || snapshot.data?.data() == null) {
+            return const Center(child: Text('No se encontró la información del partido.'));
+          }
 
-                WidgetsBinding.instance.addPostFrameCallback((_) {
-                  _syncPartido(partido, data);
-                });
+          final data = snapshot.data!.data()!;
+          final partido = Partido.fromDoc(snapshot.data!.id, data);
 
-                return SingleChildScrollView(
-                  padding: const EdgeInsets.all(16),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
-                      _MarcadorWidget(
-                        partido: partido,
-                        golesLocal: _golesLocal,
-                        golesVisitante: _golesVisitante,
-                        periodoActual: _periodoActual,
-                        tiempo: _formatDuration(_elapsed),
-                        isPlaying: _isPlaying,
-                        onEditLocal: () => _editarGoles(esLocal: true),
-                        onEditVisitante: () => _editarGoles(esLocal: false),
-                        onCambiarPeriodo: _cambiarPeriodo,
-                        onStart: _startTimer,
-                        onPause: _pauseTimer,
-                        onEditTiempo: _editarTiempo,
-                      ),
-                      const SizedBox(height: 12),
-                      FilledButton.icon(
-                        onPressed: _finalizarPartido,
-                        icon: const Icon(Icons.flag),
-                        label: const Text('Finalizar partido'),
-                        style: FilledButton.styleFrom(
-                          padding: const EdgeInsets.symmetric(vertical: 14),
-                        ),
-                      ),
-                      const SizedBox(height: 16),
-                      Text(
-                        'Zona de lanzamiento',
-                        style: Theme.of(context).textTheme.titleMedium,
-                      ),
-                      const SizedBox(height: 8),
-                      SizedBox(
-                        height: 260,
-                        child: ZonaLanzamientoSelector(
-                          zonaSeleccionada: _zonaSeleccionada,
-                          onZonaSelected: (zona) {
-                            setState(() {
-                              _zonaSeleccionada = zona;
-                            });
-                          },
-                        ),
-                      ),
-                      const SizedBox(height: 16),
-                      _JugadoresActivosSection(
-                        titulo: partido.equipoLocalNombre.toUpperCase(),
-                        dorsales: _dorsalesLocalEnJuego,
-                        seleccionadoEquipo: _equipoSeleccionado,
-                        seleccionadoDorsal: _dorsalSeleccionado,
-                        equipoClave: 'local',
-                        onTap: _seleccionarJugador,
-                      ),
-                      const SizedBox(height: 8),
-                      _JugadoresActivosSection(
-                        titulo: partido.equipoVisitanteNombre.toUpperCase(),
-                        dorsales: _dorsalesVisitanteEnJuego,
-                        seleccionadoEquipo: _equipoSeleccionado,
-                        seleccionadoDorsal: _dorsalSeleccionado,
-                        equipoClave: 'visitante',
-                        onTap: _seleccionarJugador,
-                      ),
-                      const SizedBox(height: 16),
-                      FilledButton.icon(
-                        onPressed: () {
-                          if (_dorsalSeleccionado == null ||
-                              _equipoSeleccionado == null) {
-                            _mostrarSnackBar(
-                              'Selecciona primero un jugador a sustituir',
-                            );
-                            return;
-                          }
+          if (!_initialized) {
+            WidgetsBinding.instance.addPostFrameCallback((_) {
+              _initFromSnapshot(partido, data);
+            });
+          } else {
+            _syncPartido(partido, data);
+          }
 
-                          Navigator.of(context).push(
-                            MaterialPageRoute(
-                              builder: (_) => CambiosScreen(
-                                partidoId: widget.partidoId,
-                                equipo: _equipoSeleccionado!,
-                                dorsal: _dorsalSeleccionado!,
-                                datosAccionBase: _datosAccionBase(),
-                              ),
-                            ),
-                          );
-                        },
-                        icon: const Icon(Icons.flag),
-                        label: const Text('Cambios'),
-                        style: FilledButton.styleFrom(
-                          padding: const EdgeInsets.symmetric(vertical: 14),
-                        ),
-                      ),
-                    ],
+          if (!_initialized || _partido == null) {
+            return const Center(child: CircularProgressIndicator());
+          }
+
+          final partidoActual = _partido!;
+
+          return SingleChildScrollView(
+            padding: const EdgeInsets.all(16),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                _MarcadorWidget(
+                  partido: partidoActual,
+                  golesLocal: _golesLocal,
+                  golesVisitante: _golesVisitante,
+                  periodoActual: _periodoActual,
+                  tiempo: _formatDuration(_elapsed),
+                  isPlaying: _isPlaying,
+                  onEditLocal: () => _editarGoles(esLocal: true),
+                  onEditVisitante: () => _editarGoles(esLocal: false),
+                  onCambiarPeriodo: _cambiarPeriodo,
+                  onStart: _startTimer,
+                  onPause: _pauseTimer,
+                  onEditTiempo: _editarTiempo,
+                ),
+                const SizedBox(height: 12),
+                FilledButton.icon(
+                  onPressed: _finalizarPartido,
+                  icon: const Icon(Icons.flag),
+                  label: const Text('Finalizar partido'),
+                  style: FilledButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(vertical: 14),
                   ),
-                );
-              },
+                ),
+                const SizedBox(height: 16),
+                Text(
+                  'Zona de lanzamiento',
+                  style: Theme.of(context).textTheme.titleMedium,
+                ),
+                const SizedBox(height: 8),
+                SizedBox(
+                  height: 260,
+                  child: ZonaLanzamientoSelector(
+                    zonaSeleccionada: _zonaSeleccionada,
+                    onZonaSelected: (zona) {
+                      setState(() {
+                        _zonaSeleccionada = zona;
+                      });
+                    },
+                  ),
+                ),
+                const SizedBox(height: 16),
+                _JugadoresActivosSection(
+                  titulo: partidoActual.equipoLocalNombre.toUpperCase(),
+                  dorsales: _dorsalesLocalEnJuego,
+                  seleccionadoEquipo: _equipoSeleccionado,
+                  seleccionadoDorsal: _dorsalSeleccionado,
+                  equipoClave: 'local',
+                  onTap: _seleccionarJugador,
+                ),
+                const SizedBox(height: 8),
+                _JugadoresActivosSection(
+                  titulo: partidoActual.equipoVisitanteNombre.toUpperCase(),
+                  dorsales: _dorsalesVisitanteEnJuego,
+                  seleccionadoEquipo: _equipoSeleccionado,
+                  seleccionadoDorsal: _dorsalSeleccionado,
+                  equipoClave: 'visitante',
+                  onTap: _seleccionarJugador,
+                ),
+                const SizedBox(height: 16),
+                FilledButton.icon(
+                  onPressed: () {
+                    if (_dorsalSeleccionado == null || _equipoSeleccionado == null) {
+                      _mostrarSnackBar(
+                        'Selecciona primero un jugador a sustituir',
+                      );
+                      return;
+                    }
+
+                    Navigator.of(context).push(
+                      MaterialPageRoute(
+                        builder: (_) => CambiosScreen(
+                          partidoId: widget.partidoId,
+                          equipo: _equipoSeleccionado!,
+                          dorsal: _dorsalSeleccionado!,
+                          datosAccionBase: _datosAccionBase(),
+                        ),
+                      ),
+                    );
+                  },
+                  icon: const Icon(Icons.flag),
+                  label: const Text('Cambios'),
+                  style: FilledButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(vertical: 14),
+                  ),
+                ),
+              ],
             ),
+          );
+        },
+      ),
     );
   }
 }
