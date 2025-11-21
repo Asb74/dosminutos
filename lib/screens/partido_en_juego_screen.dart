@@ -6,6 +6,140 @@ import 'package:flutter/material.dart';
 import '../models/partido.dart';
 import 'cambios_screen.dart';
 
+class PorteriaGridSelector extends StatelessWidget {
+  const PorteriaGridSelector({
+    Key? key,
+    required this.onCuadranteSelected,
+    this.cuadranteSeleccionado,
+  }) : super(key: key);
+
+  final ValueChanged<String> onCuadranteSelected;
+  final String? cuadranteSeleccionado;
+
+  static const List<List<String>> _cuadrantes = [
+    ['ST', 'SC', 'SD'], // superior izquierda, centro, derecha
+    ['MI', 'MC', 'MD'], // media izquierda, centro, derecha
+    ['IB', 'IC', 'ID'], // inferior izquierda, centro, derecha
+  ];
+
+  @override
+  Widget build(BuildContext context) {
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final width = constraints.maxWidth;
+        final height = constraints.maxHeight;
+
+        return SizedBox(
+          width: width,
+          height: height,
+          child: Stack(
+            children: [
+              Positioned.fill(
+                child: ClipRRect(
+                  borderRadius: BorderRadius.circular(12),
+                  child: Image.asset(
+                    'assets/pista/porteria_zonas.png',
+                    fit: BoxFit.cover,
+                  ),
+                ),
+              ),
+              Positioned.fill(
+                child: GestureDetector(
+                  behavior: HitTestBehavior.opaque,
+                  onTapDown: (details) {
+                    final localPos = details.localPosition;
+                    final rowHeight = height / 3;
+                    final colWidth = width / 3;
+
+                    final rowIndex =
+                        (localPos.dy / rowHeight).floor().clamp(0, 2);
+                    final colIndex =
+                        (localPos.dx / colWidth).floor().clamp(0, 2);
+
+                    final codigo = _cuadrantes[rowIndex][colIndex];
+                    onCuadranteSelected(codigo);
+                  },
+                  child: CustomPaint(
+                    painter: _PorteriaGridPainter(
+                      cuadranteSeleccionado: cuadranteSeleccionado,
+                      cuadrantes: _cuadrantes,
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+}
+
+class _PorteriaGridPainter extends CustomPainter {
+  _PorteriaGridPainter({
+    required this.cuadranteSeleccionado,
+    required this.cuadrantes,
+  });
+
+  final String? cuadranteSeleccionado;
+  final List<List<String>> cuadrantes;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final paint = Paint()
+      ..color = Colors.black54
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 1.2;
+
+    final highlightPaint = Paint()
+      ..color = Colors.yellow.withOpacity(0.25)
+      ..style = PaintingStyle.fill;
+
+    final textPainter = TextPainter(
+      textAlign: TextAlign.center,
+      textDirection: TextDirection.ltr,
+    );
+
+    final rowHeight = size.height / 3;
+    final colWidth = size.width / 3;
+
+    for (int i = 0; i < 3; i++) {
+      for (int j = 0; j < 3; j++) {
+        final left = j * colWidth;
+        final top = i * rowHeight;
+        final rect = Rect.fromLTWH(left, top, colWidth, rowHeight);
+
+        if (cuadrantes[i][j] == cuadranteSeleccionado) {
+          canvas.drawRect(rect, highlightPaint);
+        }
+
+        canvas.drawRect(rect, paint);
+
+        final label = cuadrantes[i][j];
+        textPainter.text = TextSpan(
+          text: label,
+          style: const TextStyle(
+            fontSize: 14,
+            color: Colors.black87,
+            fontWeight: FontWeight.w600,
+          ),
+        );
+        textPainter.layout();
+        final offset = Offset(
+          rect.center.dx - textPainter.width / 2,
+          rect.center.dy - textPainter.height / 2,
+        );
+        textPainter.paint(canvas, offset);
+      }
+    }
+  }
+
+  @override
+  bool shouldRepaint(covariant _PorteriaGridPainter oldDelegate) {
+    return oldDelegate.cuadranteSeleccionado != cuadranteSeleccionado;
+  }
+}
+
 class PartidoEnJuegoScreen extends StatefulWidget {
   final String partidoId;
 
@@ -35,9 +169,9 @@ class _PartidoEnJuegoScreenState extends State<PartidoEnJuegoScreen> {
   String? _equipoSeleccionado;
   int? _dorsalSeleccionado;
   String? _zonaSeleccionada;
-  String? zonaPorteriaSeleccionada;
+  String? _zonaPorteriaSeleccionada;
   bool _mostrandoAcciones = false;
-  bool mostrarPorteria = false;
+  bool _mostrandoPorteria = false;
 
   String? _accionPendiente;
   String? _contextoPendiente;
@@ -257,7 +391,7 @@ class _PartidoEnJuegoScreenState extends State<PartidoEnJuegoScreen> {
       'equipo': _equipoSeleccionado,
       'dorsal': _dorsalSeleccionado,
       'zona': _zonaSeleccionada,
-      'zonaPorteria': zonaPorteriaSeleccionada,
+      'zonaPorteria': _zonaPorteriaSeleccionada,
       'periodo': _periodoActual,
       'tiempoJuego': _formatDuration(_elapsed),
     };
@@ -265,8 +399,8 @@ class _PartidoEnJuegoScreenState extends State<PartidoEnJuegoScreen> {
 
   void _onSeleccionPorteria(String codigo) {
     setState(() {
-      zonaPorteriaSeleccionada = codigo;
-      mostrarPorteria = false;
+      _zonaPorteriaSeleccionada = codigo;
+      _mostrandoPorteria = false;
     });
 
     if (_accionPendiente != null && _contextoPendiente != null) {
@@ -303,7 +437,7 @@ class _PartidoEnJuegoScreenState extends State<PartidoEnJuegoScreen> {
       // volvemos a mostrar la cuadrícula
       _mostrandoAcciones = false;
       _zonaSeleccionada = null;
-      zonaPorteriaSeleccionada = null;
+      _zonaPorteriaSeleccionada = null;
     });
   }
 
@@ -314,7 +448,7 @@ class _PartidoEnJuegoScreenState extends State<PartidoEnJuegoScreen> {
   void _onAccionSeleccionada(String contexto, String accion) {
     if (_requierePorteria(accion)) {
       setState(() {
-        mostrarPorteria = true;
+        _mostrandoPorteria = true;
         _accionPendiente = accion;
         _contextoPendiente = contexto;
       });
@@ -468,7 +602,7 @@ class _PartidoEnJuegoScreenState extends State<PartidoEnJuegoScreen> {
                 ),
                 const SizedBox(height: 16),
                 Text(
-                  mostrarPorteria
+                  _mostrandoPorteria
                       ? 'Selecciona zona de la portería'
                       : _mostrandoAcciones
                           ? 'Selecciona la acción'
@@ -478,13 +612,16 @@ class _PartidoEnJuegoScreenState extends State<PartidoEnJuegoScreen> {
                 const SizedBox(height: 8),
                 AnimatedSwitcher(
                   duration: const Duration(milliseconds: 250),
-                  child: mostrarPorteria
+                  child: _mostrandoPorteria
                       ? Column(
                           key: const ValueKey('porteria'),
                           children: [
                             SizedBox(
                               height: 260,
-                              child: buildPorteriaGrid(),
+                              child: PorteriaGridSelector(
+                                cuadranteSeleccionado: _zonaPorteriaSeleccionada,
+                                onCuadranteSelected: _onSeleccionPorteria,
+                              ),
                             ),
                             const SizedBox(height: 8),
                             Text(
@@ -582,50 +719,6 @@ class _PartidoEnJuegoScreenState extends State<PartidoEnJuegoScreen> {
           );
         },
       ),
-    );
-  }
-
-  Widget buildPorteriaGrid() {
-    final zonas = [
-      ['SI', 'SC', 'SD'],
-      ['MI', 'MC', 'MD'],
-      ['II', 'IC', 'ID'],
-    ];
-
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        return Stack(
-          fit: StackFit.expand,
-          children: [
-            Image.asset(
-              "assets/pista/porteria_zonas.png",
-              fit: BoxFit.contain,
-            ),
-            Positioned.fill(
-              child: Column(
-                children: List.generate(3, (fila) {
-                  return Expanded(
-                    child: Row(
-                      children: List.generate(3, (columna) {
-                        final codigo = zonas[fila][columna];
-                        return Expanded(
-                          child: GestureDetector(
-                            behavior: HitTestBehavior.opaque,
-                            onTap: () => _onSeleccionPorteria(codigo),
-                            child: Container(
-                              color: Colors.transparent,
-                            ),
-                          ),
-                        );
-                      }),
-                    ),
-                  );
-                }),
-              ),
-            ),
-          ],
-        );
-      },
     );
   }
 }
