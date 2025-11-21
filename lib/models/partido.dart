@@ -106,14 +106,6 @@ class Partido {
       return DateTime.now();
     }
 
-    List<Map<String, dynamic>> _parseConvocados(Object? raw) {
-      final list = (raw as List<dynamic>? ?? []);
-      return list
-          .whereType<Map<String, dynamic>>()
-          .map((e) => Map<String, dynamic>.from(e))
-          .toList();
-    }
-
     return Partido(
       id: id,
       idPartido: (data['idPartido'] as num?)?.toInt() ?? 0,
@@ -134,10 +126,14 @@ class Partido {
       arbitro2Id: data['arbitro2Id'] as String?,
       mesa1Id: data['mesa1Id'] as String?,
       mesa2Id: data['mesa2Id'] as String?,
-      convocadosLocal: _parseConvocados(data['convocadosLocal']),
-      convocadosVisitante: _parseConvocados(data['convocadosVisitante']),
-      staffConvocadoLocal: _parseConvocados(data['staffConvocadoLocal']),
-      staffConvocadoVisitante: _parseConvocados(data['staffConvocadoVisitante']),
+      convocadosLocal:
+          (data['convocadosLocal'] as List<dynamic>? ?? []).cast<Map<String, dynamic>>(),
+      convocadosVisitante:
+          (data['convocadosVisitante'] as List<dynamic>? ?? []).cast<Map<String, dynamic>>(),
+      staffConvocadoLocal:
+          (data['staffConvocadoLocal'] as List<dynamic>? ?? []).cast<Map<String, dynamic>>(),
+      staffConvocadoVisitante:
+          (data['staffConvocadoVisitante'] as List<dynamic>? ?? []).cast<Map<String, dynamic>>(),
       estado: data['estado'] as String? ?? 'Programado',
       golesLocal: (data['golesLocal'] as num?)?.toInt() ?? 0,
       golesVisitante: (data['golesVisitante'] as num?)?.toInt() ?? 0,

@@ -38,41 +38,13 @@ class _PartidoEnJuegoScreenState extends State<PartidoEnJuegoScreen> {
 
   bool _initialized = false;
   Partido? _partido;
-
-  List<int> get _dorsalesLocalEnJuego =>
-      (_partido?.convocadosLocal ?? [])
-          .where((j) => (j['enJuego'] ?? false) == true)
-          .where((j) => j['dorsal'] != null)
-          .map<int>((j) => (j['dorsal'] as num).toInt())
-          .toList();
-
-  List<int> get _dorsalesVisitanteEnJuego =>
-      (_partido?.convocadosVisitante ?? [])
-          .where((j) => (j['enJuego'] ?? false) == true)
-          .where((j) => j['dorsal'] != null)
-          .map<int>((j) => (j['dorsal'] as num).toInt())
-          .toList();
+  List<int> _jugadoresLocal = [];
+  List<int> _jugadoresVisitante = [];
 
   @override
   void dispose() {
     _timer?.cancel();
     super.dispose();
-  }
-
-  void _initFromSnapshot(Partido partido, Map<String, dynamic> data) {
-    if (_initialized || !mounted) return;
-
-    final segundos = (data['segundoPartido'] as num?)?.toInt() ?? 0;
-
-    setState(() {
-      _partido = partido;
-      _golesLocal = partido.golesLocal;
-      _golesVisitante = partido.golesVisitante;
-      _periodoActual = (data['periodoActual'] as String?) ?? _periodoActual;
-      _elapsed = Duration(seconds: segundos);
-      _equipoSeleccionado ??= 'local';
-      _initialized = true;
-    });
   }
 
   void _startTimer() {
@@ -298,38 +270,65 @@ class _PartidoEnJuegoScreenState extends State<PartidoEnJuegoScreen> {
   }
 
   void _syncPartido(Partido partido, Map<String, dynamic> data) {
-    if (!mounted || _isPlaying) return;
+    final convocadosLocal = (data['convocadosLocal'] as List<dynamic>? ?? [])
+        .cast<Map<String, dynamic>>();
+    final convocadosVisitante =
+        (data['convocadosVisitante'] as List<dynamic>? ?? [])
+            .cast<Map<String, dynamic>>();
 
-    final segundos = (data['segundoPartido'] as num?)?.toInt();
-    final nuevoPeriodo = (data['periodoActual'] as String?) ?? _periodoActual;
+    final nuevosLocal = convocadosLocal
+        .where((j) => j['enJuego'] == true)
+        .map<int>((j) => (j['dorsal'] as num).toInt())
+        .toList();
 
-    final shouldUpdateTiempo =
-        segundos != null && _elapsed.inSeconds != segundos && !_isPlaying;
-    final shouldUpdatePeriodo = nuevoPeriodo != _periodoActual;
-    final shouldUpdateGoles = partido.golesLocal != _golesLocal ||
-        partido.golesVisitante != _golesVisitante;
+    final nuevosVisitante = convocadosVisitante
+        .where((j) => j['enJuego'] == true)
+        .map<int>((j) => (j['dorsal'] as num).toInt())
+        .toList();
 
-    if (!shouldUpdateTiempo && !shouldUpdatePeriodo && !shouldUpdateGoles) {
+    if (_initialized && _partido?.id == partido.id) {
+      // Solo actualiza si algo ha cambiado para evitar parpadeo
+      final haCambiadoLocal = !_listasIguales(_jugadoresLocal, nuevosLocal);
+      final haCambiadoVisitante =
+          !_listasIguales(_jugadoresVisitante, nuevosVisitante);
+
+      setState(() {
+        _partido = partido;
+        if (haCambiadoLocal) _jugadoresLocal = nuevosLocal;
+        if (haCambiadoVisitante) _jugadoresVisitante = nuevosVisitante;
+        _golesLocal = partido.golesLocal;
+        _golesVisitante = partido.golesVisitante;
+        _periodoActual = (data['periodoActual'] as String?) ?? _periodoActual;
+        final segundos = (data['segundoPartido'] as num?)?.toInt() ?? 0;
+        if (!_isPlaying) {
+          _elapsed = Duration(seconds: segundos);
+        }
+      });
       return;
     }
 
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!mounted) return;
-      setState(() {
-        _partido = partido;
-        if (shouldUpdateGoles) {
-          _golesLocal = partido.golesLocal;
-          _golesVisitante = partido.golesVisitante;
-        }
-        if (shouldUpdatePeriodo) {
-          _periodoActual = nuevoPeriodo;
-        }
-        if (shouldUpdateTiempo && !_isPlaying && segundos != null) {
-          _elapsed = Duration(seconds: segundos);
-        }
-        _equipoSeleccionado ??= 'local';
-      });
+    // Primera vez que se sincroniza
+    setState(() {
+      _partido = partido;
+      _jugadoresLocal = nuevosLocal;
+      _jugadoresVisitante = nuevosVisitante;
+      _golesLocal = partido.golesLocal;
+      _golesVisitante = partido.golesVisitante;
+      _periodoActual = (data['periodoActual'] as String?) ?? _periodoActual;
+      final segundos = (data['segundoPartido'] as num?)?.toInt() ?? 0;
+      _elapsed = Duration(seconds: segundos);
+      _equipoSeleccionado ??= 'local';
+      _initialized = true;
     });
+  }
+
+  bool _listasIguales(List<int> a, List<int> b) {
+    if (identical(a, b)) return true;
+    if (a.length != b.length) return false;
+    for (int i = 0; i < a.length; i++) {
+      if (a[i] != b[i]) return false;
+    }
+    return true;
   }
 
   @override
@@ -360,13 +359,10 @@ class _PartidoEnJuegoScreenState extends State<PartidoEnJuegoScreen> {
           final data = snapshot.data!.data()!;
           final partido = Partido.fromDoc(snapshot.data!.id, data);
 
-          if (!_initialized) {
-            WidgetsBinding.instance.addPostFrameCallback((_) {
-              _initFromSnapshot(partido, data);
-            });
-          } else {
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            if (!mounted) return;
             _syncPartido(partido, data);
-          }
+          });
 
           if (!_initialized || _partido == null) {
             return const Center(child: CircularProgressIndicator());
@@ -422,7 +418,7 @@ class _PartidoEnJuegoScreenState extends State<PartidoEnJuegoScreen> {
                 const SizedBox(height: 16),
                 _JugadoresActivosSection(
                   titulo: partidoActual.equipoLocalNombre.toUpperCase(),
-                  dorsales: _dorsalesLocalEnJuego,
+                  dorsales: _jugadoresLocal,
                   seleccionadoEquipo: _equipoSeleccionado,
                   seleccionadoDorsal: _dorsalSeleccionado,
                   equipoClave: 'local',
@@ -431,7 +427,7 @@ class _PartidoEnJuegoScreenState extends State<PartidoEnJuegoScreen> {
                 const SizedBox(height: 8),
                 _JugadoresActivosSection(
                   titulo: partidoActual.equipoVisitanteNombre.toUpperCase(),
-                  dorsales: _dorsalesVisitanteEnJuego,
+                  dorsales: _jugadoresVisitante,
                   seleccionadoEquipo: _equipoSeleccionado,
                   seleccionadoDorsal: _dorsalSeleccionado,
                   equipoClave: 'visitante',

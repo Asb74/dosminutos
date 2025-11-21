@@ -46,14 +46,20 @@ class _CambiosScreenState extends State<CambiosScreen> {
             }
 
             final data = snapshot.data!.data()!;
-            final key = widget.equipo == 'local'
-                ? 'convocadosLocal'
-                : 'convocadosVisitante';
-            final List<Map<String, dynamic>> convocados =
-                (data[key] as List<dynamic>? ?? [])
+            final convocadosLocal = (data['convocadosLocal'] as List<dynamic>? ?? [])
+                .whereType<Map<String, dynamic>>()
+                .map((e) => Map<String, dynamic>.from(e))
+                .toList();
+
+            final convocadosVisitante =
+                (data['convocadosVisitante'] as List<dynamic>? ?? [])
                     .whereType<Map<String, dynamic>>()
                     .map((e) => Map<String, dynamic>.from(e))
                     .toList();
+
+            final esLocal = widget.equipo == 'local';
+            final List<Map<String, dynamic>> convocados =
+                esLocal ? convocadosLocal : convocadosVisitante;
 
             if (convocados.isEmpty) {
               return const Center(child: Text('No hay jugadores disponibles.'));
@@ -131,9 +137,10 @@ class _CambiosScreenState extends State<CambiosScreen> {
                                     return InkWell(
                                       onTap: () => _hacerCambio(
                                         jugador,
-                                        convocados,
+                                        convocadosLocal,
+                                        convocadosVisitante,
                                         jugadorActualIndex,
-                                        key,
+                                        esLocal,
                                       ),
                                       borderRadius: BorderRadius.circular(12),
                                       child: Padding(
@@ -206,35 +213,40 @@ class _CambiosScreenState extends State<CambiosScreen> {
 
   Future<void> _hacerCambio(
     Map<String, dynamic> jugadorEntrante,
-    List<Map<String, dynamic>> convocados,
+    List<Map<String, dynamic>> convocadosLocal,
+    List<Map<String, dynamic>> convocadosVisitante,
     int jugadorActualIndex,
-    String key,
+    bool esLocal,
   ) async {
     if (jugadorActualIndex < 0) {
       // Si el jugador actual no está en el array, no hacemos nada.
       return;
     }
 
-    final updated = convocados
+    final nuevosConvocadosLocal = convocadosLocal
         .map((j) => Map<String, dynamic>.from(j))
         .toList(growable: false);
 
-    updated[jugadorActualIndex]['enJuego'] = false;
+    final nuevosConvocadosVisitante = convocadosVisitante
+        .map((j) => Map<String, dynamic>.from(j))
+        .toList(growable: false);
+
+    final seleccionados = esLocal ? nuevosConvocadosLocal : nuevosConvocadosVisitante;
+
+    seleccionados[jugadorActualIndex]['enJuego'] = false;
 
     final dorsalEntrante = (jugadorEntrante['dorsal'] as num?)?.toInt();
-    final idxEntrante = updated.indexWhere(
+    final idxEntrante = seleccionados.indexWhere(
       (j) => (j['dorsal'] as num?)?.toInt() == dorsalEntrante,
     );
 
     if (idxEntrante >= 0) {
-      updated[idxEntrante]['enJuego'] = true;
+      seleccionados[idxEntrante]['enJuego'] = true;
     }
 
-    await FirebaseFirestore.instance
-        .collection('Partidos')
-        .doc(widget.partidoId)
-        .update({
-      key: updated,
+    await FirebaseFirestore.instance.collection('Partidos').doc(widget.partidoId).update({
+      'convocadosLocal': nuevosConvocadosLocal,
+      'convocadosVisitante': nuevosConvocadosVisitante,
     });
 
     if (mounted) Navigator.of(context).pop();
