@@ -35,7 +35,12 @@ class _PartidoEnJuegoScreenState extends State<PartidoEnJuegoScreen> {
   String? _equipoSeleccionado;
   int? _dorsalSeleccionado;
   String? _zonaSeleccionada;
+  String? zonaPorteriaSeleccionada;
   bool _mostrandoAcciones = false;
+  bool mostrarPorteria = false;
+
+  String? _accionPendiente;
+  String? _contextoPendiente;
 
   bool _initialized = false;
   Partido? _partido;
@@ -252,9 +257,25 @@ class _PartidoEnJuegoScreenState extends State<PartidoEnJuegoScreen> {
       'equipo': _equipoSeleccionado,
       'dorsal': _dorsalSeleccionado,
       'zona': _zonaSeleccionada,
+      'zonaPorteria': zonaPorteriaSeleccionada,
       'periodo': _periodoActual,
       'tiempoJuego': _formatDuration(_elapsed),
     };
+  }
+
+  void _onSeleccionPorteria(String codigo) {
+    setState(() {
+      zonaPorteriaSeleccionada = codigo;
+      mostrarPorteria = false;
+    });
+
+    if (_accionPendiente != null && _contextoPendiente != null) {
+      final accion = _accionPendiente!;
+      final contexto = _contextoPendiente!;
+      _accionPendiente = null;
+      _contextoPendiente = null;
+      _registrarAccion(contexto: contexto, accion: accion);
+    }
   }
 
   Future<void> _registrarAccion({
@@ -282,7 +303,25 @@ class _PartidoEnJuegoScreenState extends State<PartidoEnJuegoScreen> {
       // volvemos a mostrar la cuadrícula
       _mostrandoAcciones = false;
       _zonaSeleccionada = null;
+      zonaPorteriaSeleccionada = null;
     });
+  }
+
+  bool _requierePorteria(String accion) {
+    return accion == 'Gol' || accion == 'Gol Contra' || accion == 'Parada';
+  }
+
+  void _onAccionSeleccionada(String contexto, String accion) {
+    if (_requierePorteria(accion)) {
+      setState(() {
+        mostrarPorteria = true;
+        _accionPendiente = accion;
+        _contextoPendiente = contexto;
+      });
+      return;
+    }
+
+    _registrarAccion(contexto: contexto, accion: accion);
   }
 
   void _seleccionarJugador(String equipo, int dorsal) {
@@ -429,47 +468,69 @@ class _PartidoEnJuegoScreenState extends State<PartidoEnJuegoScreen> {
                 ),
                 const SizedBox(height: 16),
                 Text(
-                  _mostrandoAcciones ? 'Selecciona la acción' : 'Zona de lanzamiento',
+                  mostrarPorteria
+                      ? 'Selecciona zona de la portería'
+                      : _mostrandoAcciones
+                          ? 'Selecciona la acción'
+                          : 'Zona de lanzamiento',
                   style: Theme.of(context).textTheme.titleMedium,
                 ),
                 const SizedBox(height: 8),
                 AnimatedSwitcher(
                   duration: const Duration(milliseconds: 250),
-                  child: _mostrandoAcciones
-                      ? _AccionesPanel(
-                          key: const ValueKey('acciones'),
-                          onAccionSeleccionada: (contexto, accion) {
-                            _registrarAccion(contexto: contexto, accion: accion);
-                          },
-                        )
-                      : Column(
-                          key: const ValueKey('zonas'),
+                  child: mostrarPorteria
+                      ? Column(
+                          key: const ValueKey('porteria'),
                           children: [
                             SizedBox(
                               height: 260,
-                              child: ZonaLanzamientoSelector(
-                                zonaSeleccionada: _zonaSeleccionada,
-                                onZonaSelected: (zona) {
-                                  if (_dorsalSeleccionado == null || _equipoSeleccionado == null) {
-                                    _mostrarSnackBar('Selecciona primero un jugador y después la zona');
-                                    return;
-                                  }
-                                  setState(() {
-                                    _zonaSeleccionada = zona;
-                                    _mostrandoAcciones = true;
-                                  });
-                                },
-                              ),
+                              child: buildPorteriaGrid(),
                             ),
                             const SizedBox(height: 8),
                             Text(
-                              _zonaSeleccionada == null
-                                  ? 'Toca una zona para seleccionarla'
-                                  : 'Zona seleccionada: $_zonaSeleccionada',
+                              'Toca un cuadrante de la portería',
                               textAlign: TextAlign.center,
                             ),
                           ],
-                        ),
+                        )
+                      : _mostrandoAcciones
+                          ? _AccionesPanel(
+                              key: const ValueKey('acciones'),
+                              onAccionSeleccionada: (contexto, accion) {
+                                _onAccionSeleccionada(contexto, accion);
+                              },
+                            )
+                          : Column(
+                              key: const ValueKey('zonas'),
+                              children: [
+                                SizedBox(
+                                  height: 260,
+                                  child: ZonaLanzamientoSelector(
+                                    zonaSeleccionada: _zonaSeleccionada,
+                                    onZonaSelected: (zona) {
+                                      if (_dorsalSeleccionado == null ||
+                                          _equipoSeleccionado == null) {
+                                        _mostrarSnackBar(
+                                          'Selecciona primero un jugador y después la zona',
+                                        );
+                                        return;
+                                      }
+                                      setState(() {
+                                        _zonaSeleccionada = zona;
+                                        _mostrandoAcciones = true;
+                                      });
+                                    },
+                                  ),
+                                ),
+                                const SizedBox(height: 8),
+                                Text(
+                                  _zonaSeleccionada == null
+                                      ? 'Toca una zona para seleccionarla'
+                                      : 'Zona seleccionada: $_zonaSeleccionada',
+                                  textAlign: TextAlign.center,
+                                ),
+                              ],
+                            ),
                 ),
                 const SizedBox(height: 16),
                 _JugadoresActivosSection(
@@ -521,6 +582,50 @@ class _PartidoEnJuegoScreenState extends State<PartidoEnJuegoScreen> {
           );
         },
       ),
+    );
+  }
+
+  Widget buildPorteriaGrid() {
+    final zonas = [
+      ['SI', 'SC', 'SD'],
+      ['MI', 'MC', 'MD'],
+      ['II', 'IC', 'ID'],
+    ];
+
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        return Stack(
+          fit: StackFit.expand,
+          children: [
+            Image.asset(
+              "assets/pista/porteria_zonas.png",
+              fit: BoxFit.contain,
+            ),
+            Positioned.fill(
+              child: Column(
+                children: List.generate(3, (fila) {
+                  return Expanded(
+                    child: Row(
+                      children: List.generate(3, (columna) {
+                        final codigo = zonas[fila][columna];
+                        return Expanded(
+                          child: GestureDetector(
+                            behavior: HitTestBehavior.opaque,
+                            onTap: () => _onSeleccionPorteria(codigo),
+                            child: Container(
+                              color: Colors.transparent,
+                            ),
+                          ),
+                        );
+                      }),
+                    ),
+                  );
+                }),
+              ),
+            ),
+          ],
+        );
+      },
     );
   }
 }
