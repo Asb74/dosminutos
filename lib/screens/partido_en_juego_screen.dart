@@ -37,6 +37,21 @@ class _PartidoEnJuegoScreenState extends State<PartidoEnJuegoScreen> {
   String? _zonaSeleccionada;
 
   bool _initialized = false;
+  Partido? _partido;
+
+  List<int> get _dorsalesLocalEnJuego =>
+      (_partido?.convocadosLocal ?? [])
+          .where((j) => (j['enJuego'] ?? false) == true)
+          .where((j) => j['dorsal'] != null)
+          .map<int>((j) => (j['dorsal'] as num).toInt())
+          .toList();
+
+  List<int> get _dorsalesVisitanteEnJuego =>
+      (_partido?.convocadosVisitante ?? [])
+          .where((j) => (j['enJuego'] ?? false) == true)
+          .where((j) => j['dorsal'] != null)
+          .map<int>((j) => (j['dorsal'] as num).toInt())
+          .toList();
 
   @override
   void initState() {
@@ -63,6 +78,7 @@ class _PartidoEnJuegoScreenState extends State<PartidoEnJuegoScreen> {
     if (!mounted) return;
 
     setState(() {
+      _partido = partido;
       _golesLocal = partido.golesLocal;
       _golesVisitante = partido.golesVisitante;
       _periodoActual = (data['periodoActual'] as String?) ?? _periodoActual;
@@ -132,7 +148,7 @@ class _PartidoEnJuegoScreenState extends State<PartidoEnJuegoScreen> {
 
     final parsed = _parseDuration(resultado);
     if (parsed == null) {
-      _mostrarSnackBar('Formato inválido. Usa MM:SS o HH:MM:SS');
+      _mostrarSnackBar('Formato de tiempo no válido. Usa MM:SS o HH:MM:SS');
       return;
     }
 
@@ -295,6 +311,22 @@ class _PartidoEnJuegoScreenState extends State<PartidoEnJuegoScreen> {
     );
   }
 
+  void _syncPartido(Partido partido, Map<String, dynamic> data) {
+    if (!mounted) return;
+
+    setState(() {
+      _partido = partido;
+      _golesLocal = partido.golesLocal;
+      _golesVisitante = partido.golesVisitante;
+      _periodoActual = (data['periodoActual'] as String?) ?? _periodoActual;
+      final segundos = (data['segundoPartido'] as num?)?.toInt();
+      if (segundos != null) {
+        _elapsed = Duration(seconds: segundos);
+      }
+      _equipoSeleccionado ??= 'local';
+    });
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -322,24 +354,9 @@ class _PartidoEnJuegoScreenState extends State<PartidoEnJuegoScreen> {
                 final data = snapshot.data!.data()!;
                 final partido = Partido.fromDoc(snapshot.data!.id, data);
 
-                final List<Map<String, dynamic>> convLocalRaw =
-                    (data['convocadosLocal'] as List? ?? [])
-                        .map((e) => Map<String, dynamic>.from(e as Map))
-                        .toList();
-                final List<Map<String, dynamic>> convVisRaw =
-                    (data['convocadosVisitante'] as List? ?? [])
-                        .map((e) => Map<String, dynamic>.from(e as Map))
-                        .toList();
-
-                final List<int> jugadoresLocalEnJuego = convLocalRaw
-                    .where((e) => (e['enJuego'] ?? false) == true)
-                    .map<int>((e) => (e['dorsal'] as num).toInt())
-                    .toList();
-
-                final List<int> jugadoresVisitEnJuego = convVisRaw
-                    .where((e) => (e['enJuego'] ?? false) == true)
-                    .map<int>((e) => (e['dorsal'] as num).toInt())
-                    .toList();
+                WidgetsBinding.instance.addPostFrameCallback((_) {
+                  _syncPartido(partido, data);
+                });
 
                 return SingleChildScrollView(
                   padding: const EdgeInsets.all(16),
@@ -386,17 +403,10 @@ class _PartidoEnJuegoScreenState extends State<PartidoEnJuegoScreen> {
                           },
                         ),
                       ),
-                      const SizedBox(height: 8),
-                      Text(
-                        _zonaSeleccionada == null
-                            ? 'Toca una zona para seleccionarla'
-                            : 'Zona seleccionada: $_zonaSeleccionada',
-                        textAlign: TextAlign.center,
-                      ),
                       const SizedBox(height: 16),
                       _JugadoresActivosSection(
                         titulo: partido.equipoLocalNombre.toUpperCase(),
-                        dorsales: jugadoresLocalEnJuego,
+                        dorsales: _dorsalesLocalEnJuego,
                         seleccionadoEquipo: _equipoSeleccionado,
                         seleccionadoDorsal: _dorsalSeleccionado,
                         equipoClave: 'local',
@@ -405,7 +415,7 @@ class _PartidoEnJuegoScreenState extends State<PartidoEnJuegoScreen> {
                       const SizedBox(height: 8),
                       _JugadoresActivosSection(
                         titulo: partido.equipoVisitanteNombre.toUpperCase(),
-                        dorsales: jugadoresVisitEnJuego,
+                        dorsales: _dorsalesVisitanteEnJuego,
                         seleccionadoEquipo: _equipoSeleccionado,
                         seleccionadoDorsal: _dorsalSeleccionado,
                         equipoClave: 'visitante',
