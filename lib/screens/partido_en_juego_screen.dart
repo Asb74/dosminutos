@@ -35,6 +35,7 @@ class _PartidoEnJuegoScreenState extends State<PartidoEnJuegoScreen> {
   String? _equipoSeleccionado;
   int? _dorsalSeleccionado;
   String? _zonaSeleccionada;
+  bool _mostrandoAcciones = false;
 
   bool _initialized = false;
   Partido? _partido;
@@ -256,6 +257,34 @@ class _PartidoEnJuegoScreenState extends State<PartidoEnJuegoScreen> {
     };
   }
 
+  Future<void> _registrarAccion({
+    required String contexto, // 'ataque' o 'defensa'
+    required String accion, // 'Gol', 'Parada', etc.
+  }) async {
+    if (_equipoSeleccionado == null ||
+        _dorsalSeleccionado == null ||
+        _zonaSeleccionada == null) {
+      _mostrarSnackBar('Selecciona jugador y zona antes de registrar la acción');
+      return;
+    }
+
+    final datosBase = _datosAccionBase();
+    final datos = {
+      ...datosBase,
+      'contexto': contexto,
+      'accion': accion,
+    };
+
+    // De momento solo haz un print, ya conectaremos con Firestore después.
+    print('ACCION REGISTRADA: $datos');
+
+    setState(() {
+      // volvemos a mostrar la cuadrícula
+      _mostrandoAcciones = false;
+      _zonaSeleccionada = null;
+    });
+  }
+
   void _seleccionarJugador(String equipo, int dorsal) {
     setState(() {
       _equipoSeleccionado = equipo;
@@ -400,20 +429,47 @@ class _PartidoEnJuegoScreenState extends State<PartidoEnJuegoScreen> {
                 ),
                 const SizedBox(height: 16),
                 Text(
-                  'Zona de lanzamiento',
+                  _mostrandoAcciones ? 'Selecciona la acción' : 'Zona de lanzamiento',
                   style: Theme.of(context).textTheme.titleMedium,
                 ),
                 const SizedBox(height: 8),
-                SizedBox(
-                  height: 260,
-                  child: ZonaLanzamientoSelector(
-                    zonaSeleccionada: _zonaSeleccionada,
-                    onZonaSelected: (zona) {
-                      setState(() {
-                        _zonaSeleccionada = zona;
-                      });
-                    },
-                  ),
+                AnimatedSwitcher(
+                  duration: const Duration(milliseconds: 250),
+                  child: _mostrandoAcciones
+                      ? _AccionesPanel(
+                          key: const ValueKey('acciones'),
+                          onAccionSeleccionada: (contexto, accion) {
+                            _registrarAccion(contexto: contexto, accion: accion);
+                          },
+                        )
+                      : Column(
+                          key: const ValueKey('zonas'),
+                          children: [
+                            SizedBox(
+                              height: 260,
+                              child: ZonaLanzamientoSelector(
+                                zonaSeleccionada: _zonaSeleccionada,
+                                onZonaSelected: (zona) {
+                                  if (_dorsalSeleccionado == null || _equipoSeleccionado == null) {
+                                    _mostrarSnackBar('Selecciona primero un jugador y después la zona');
+                                    return;
+                                  }
+                                  setState(() {
+                                    _zonaSeleccionada = zona;
+                                    _mostrandoAcciones = true;
+                                  });
+                                },
+                              ),
+                            ),
+                            const SizedBox(height: 8),
+                            Text(
+                              _zonaSeleccionada == null
+                                  ? 'Toca una zona para seleccionarla'
+                                  : 'Zona seleccionada: $_zonaSeleccionada',
+                              textAlign: TextAlign.center,
+                            ),
+                          ],
+                        ),
                 ),
                 const SizedBox(height: 16),
                 _JugadoresActivosSection(
@@ -782,6 +838,96 @@ class _JugadoresActivosSection extends StatelessWidget {
           }).toList(),
         ),
       ],
+    );
+  }
+}
+
+class _AccionesPanel extends StatelessWidget {
+  const _AccionesPanel({
+    super.key,
+    required this.onAccionSeleccionada,
+  });
+
+  final void Function(String contexto, String accion) onAccionSeleccionada;
+
+  @override
+  Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
+
+    Widget buildBoton(String texto, String contexto) {
+      return FilledButton.tonal(
+        onPressed: () => onAccionSeleccionada(contexto, texto),
+        style: FilledButton.styleFrom(
+          padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
+        ),
+        child: Text(texto),
+      );
+    }
+
+    return Card(
+      margin: EdgeInsets.zero,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+      color: colorScheme.surface,
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // Columna ATAQUE
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text(
+                    'Ataque',
+                    style: TextStyle(fontWeight: FontWeight.bold),
+                  ),
+                  const SizedBox(height: 12),
+                  Wrap(
+                    spacing: 8,
+                    runSpacing: 8,
+                    children: [
+                      buildBoton('Gol', 'ataque'),
+                      buildBoton('Gol Contra', 'ataque'),
+                      buildBoton('Fallo', 'ataque'),
+                      buildBoton('Parada', 'ataque'),
+                      buildBoton('Bloqueo', 'ataque'),
+                      buildBoton('Perdida', 'ataque'),
+                      buildBoton('Pasivo', 'ataque'),
+                      buildBoton('Línea', 'ataque'),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(width: 16),
+            // Columna DEFENSA
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text(
+                    'Defensa',
+                    style: TextStyle(fontWeight: FontWeight.bold),
+                  ),
+                  const SizedBox(height: 12),
+                  Wrap(
+                    spacing: 8,
+                    runSpacing: 8,
+                    children: [
+                      buildBoton('Golpe', 'defensa'),
+                      buildBoton('2 minutos', 'defensa'),
+                      buildBoton('Tarjeta Amarilla', 'defensa'),
+                      buildBoton('Tarjeta Roja', 'defensa'),
+                      buildBoton('Tarjeta Azul', 'defensa'),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
     );
   }
 }
