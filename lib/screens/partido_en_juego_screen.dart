@@ -1,274 +1,303 @@
 import 'dart:async';
 
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
-import '../models/evento_partido.dart';
-import '../models/jugador.dart';
 import '../models/partido.dart';
-import '../services/eventos_service.dart';
-import '../widgets/pista_handball_overlay.dart'; // NUEVO
+import 'cambios_screen.dart';
 
 class PartidoEnJuegoScreen extends StatefulWidget {
   final String partidoId;
 
-  const PartidoEnJuegoScreen({
-    Key? key,
-    required this.partidoId,
-  }) : super(key: key);
+  const PartidoEnJuegoScreen({super.key, required this.partidoId});
 
   @override
   State<PartidoEnJuegoScreen> createState() => _PartidoEnJuegoScreenState();
 }
 
 class _PartidoEnJuegoScreenState extends State<PartidoEnJuegoScreen> {
+  final List<String> _periodos = const [
+    '1º Tiempo',
+    '2º Tiempo',
+    '1ª Prórroga',
+    '2ª Prórroga',
+  ];
+
+  final List<int> _jugadoresLocal = const [1, 4, 7, 9, 12, 16, 20];
+  final List<int> _jugadoresVisitante = const [5, 8, 10, 14, 18, 21, 30];
+
   Timer? _timer;
-  Stopwatch _stopwatch = Stopwatch();
-  int _elapsedSeconds = 0;
-  int _baseSeconds = 0;
-  bool _isRunning = false;
-  bool _hasStarted = false;
-  int _periodoActual = 1;
+  Duration _elapsed = Duration.zero;
+  bool _isPlaying = false;
+  int _ticksSincePersist = 0;
+
   int _golesLocal = 0;
   int _golesVisitante = 0;
-  Partido? _partido;
-  bool _hasInitializedFromPartido = false;
-  TipoAccion _selectedAccion = TipoAccion.gol;
-  FaseJuego _faseSeleccionada = FaseJuego.ataque;
+  String _periodoActual = '1º Tiempo';
+
   String? _equipoSeleccionado;
-  String? _jugadorSeleccionado;
-  ZonaJuego? _zonaSeleccionada;
+  int? _dorsalSeleccionado;
+  String? _zonaSeleccionada;
 
-  final TextEditingController _notaController = TextEditingController();
-
-  Future<List<Jugador>>? _convocadosFuture;
-  List<int>? _ultimaListaConvocados;
+  Partido? _partido;
+  bool _initialized = false;
 
   @override
   void dispose() {
     _timer?.cancel();
-    _stopwatch.stop();
-    _baseSeconds += _stopwatch.elapsed.inSeconds;
-    _elapsedSeconds = _baseSeconds;
-    _persistTiempoPeriodo();
-    _notaController.dispose();
     super.dispose();
   }
 
-  void _startTimer() {
-    if (_isRunning) return;
-
-    if (!_hasStarted) {
-      FirebaseFirestore.instance
-          .collection('Partidos')
-          .doc(widget.partidoId)
-          .update({'estado': 'EnJuego'});
-      _hasStarted = true;
+  void _syncPartido(Partido partido, Map<String, dynamic> data) {
+    if (_initialized && _partido?.id == partido.id) {
+      _syncLiveUpdates(partido, data);
+      return;
     }
 
-    _stopwatch.start();
-    _timer = Timer.periodic(const Duration(seconds: 1), (_) {
-      setState(() {
-        _elapsedSeconds = _baseSeconds + _stopwatch.elapsed.inSeconds;
-      });
-    });
-    setState(() {
-      _isRunning = true;
-    });
-  }
-
-  void _stopTimer() {
-    _timer?.cancel();
-    _stopwatch.stop();
-    _baseSeconds += _stopwatch.elapsed.inSeconds;
-    _elapsedSeconds = _baseSeconds;
-    _stopwatch.reset();
-    setState(() {
-      _isRunning = false;
-    });
-    _persistTiempoPeriodo();
-  }
-
-  void _reiniciarPeriodo() {
-    final estabaCorriendo = _isRunning;
-    _stopTimer();
-    setState(() {
-      _periodoActual++;
-      _baseSeconds = 0;
-      _elapsedSeconds = 0;
-      _stopwatch.reset();
-    });
-    _persistTiempoPeriodo(segundos: 0);
-    if (estabaCorriendo) {
-      _startTimer();
-    }
-  }
-
-  String _formatDuration(int seconds) {
-    final minutes = (seconds ~/ 60).toString().padLeft(2, '0');
-    final secs = (seconds % 60).toString().padLeft(2, '0');
-    return '$minutes:$secs';
-  }
-
-  void _initializeFromPartido(Partido partido) {
     setState(() {
       _partido = partido;
       _golesLocal = partido.golesLocal;
       _golesVisitante = partido.golesVisitante;
-      _periodoActual = partido.periodo;
-      _baseSeconds = partido.segundoPartido;
-      _elapsedSeconds = partido.segundoPartido;
-      _stopwatch = Stopwatch();
-      _hasStarted = partido.estado == 'EnJuego' || partido.estado == 'Finalizado';
-      _hasInitializedFromPartido = true;
+      _periodoActual = (data['periodoActual'] as String?) ?? _periodoActual;
+      final segundos = (data['segundoPartido'] as num?)?.toInt() ?? 0;
+      _elapsed = Duration(seconds: segundos);
+      _equipoSeleccionado ??= 'local';
+      _initialized = true;
     });
   }
 
-  void _sincronizarPartido(Partido partido) {
-    if (!_hasInitializedFromPartido || _partido?.id != partido.id) {
-      _initializeFromPartido(partido);
-      return;
-    }
-
-    final debeActualizarMarcador =
-        _golesLocal != partido.golesLocal || _golesVisitante != partido.golesVisitante;
-    final debeActualizarPeriodo = _periodoActual != partido.periodo;
-    final debeActualizarTiempo =
-        !_isRunning && (_baseSeconds != partido.segundoPartido || _elapsedSeconds != partido.segundoPartido);
-
-    if (!debeActualizarMarcador && !debeActualizarPeriodo && !debeActualizarTiempo) {
-      return; // MODIFICADO: evitamos setState innecesarios que causaban parpadeos
-    }
+  void _syncLiveUpdates(Partido partido, Map<String, dynamic> data) {
+    final segundos = (data['segundoPartido'] as num?)?.toInt() ?? 0;
+    final nuevoPeriodo = (data['periodoActual'] as String?) ?? _periodoActual;
 
     setState(() {
       _partido = partido;
-      if (debeActualizarMarcador) {
-        _golesLocal = partido.golesLocal;
-        _golesVisitante = partido.golesVisitante;
+      if (!_isPlaying) {
+        _elapsed = Duration(seconds: segundos);
       }
-      if (debeActualizarPeriodo) {
-        _periodoActual = partido.periodo;
-      }
-      if (debeActualizarTiempo) {
-        _baseSeconds = partido.segundoPartido;
-        _elapsedSeconds = partido.segundoPartido;
-      }
+      _periodoActual = nuevoPeriodo;
+      _golesLocal = partido.golesLocal;
+      _golesVisitante = partido.golesVisitante;
     });
   }
 
-  Future<void> _persistTiempoPeriodo({int? segundos}) async {
+  void _startTimer() {
+    if (_isPlaying) return;
+
+    _timer = Timer.periodic(const Duration(seconds: 1), (_) {
+      setState(() {
+        _elapsed += const Duration(seconds: 1);
+        _ticksSincePersist++;
+      });
+      if (_ticksSincePersist >= 15) {
+        _persistTiempo();
+        _ticksSincePersist = 0;
+      }
+    });
+
+    setState(() {
+      _isPlaying = true;
+    });
+  }
+
+  void _pauseTimer() {
+    _timer?.cancel();
+    _timer = null;
+    setState(() {
+      _isPlaying = false;
+    });
+    _persistTiempo();
+    _ticksSincePersist = 0;
+  }
+
+  Future<void> _editarTiempo() async {
+    final controller = TextEditingController(text: _formatDuration(_elapsed));
+    final resultado = await showDialog<String>(
+      context: context,
+      builder: (context) {
+        return AlertDialog(
+          title: const Text('Editar tiempo'),
+          content: TextField(
+            controller: controller,
+            keyboardType: TextInputType.datetime,
+            decoration: const InputDecoration(hintText: 'MM:SS o HH:MM:SS'),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(),
+              child: const Text('Cancelar'),
+            ),
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(controller.text.trim()),
+              child: const Text('Guardar'),
+            ),
+          ],
+        );
+      },
+    );
+
+    if (resultado == null || resultado.isEmpty) return;
+
+    final parsed = _parseDuration(resultado);
+    if (parsed == null) {
+      _mostrarSnackBar('Formato inválido. Usa MM:SS o HH:MM:SS');
+      return;
+    }
+
+    setState(() {
+      _elapsed = parsed;
+    });
+    _persistTiempo();
+  }
+
+  Duration? _parseDuration(String input) {
+    final parts = input.split(':');
+    if (parts.length < 2 || parts.length > 3) return null;
+
+    try {
+      final hours = parts.length == 3 ? int.parse(parts[0]) : 0;
+      final minutes = int.parse(parts[parts.length - 2]);
+      final seconds = int.parse(parts.last);
+      return Duration(hours: hours, minutes: minutes, seconds: seconds);
+    } catch (_) {
+      return null;
+    }
+  }
+
+  String _formatDuration(Duration duration) {
+    final hours = duration.inHours;
+    final minutes = duration.inMinutes % 60;
+    final seconds = duration.inSeconds % 60;
+    final buffer = StringBuffer();
+    if (hours > 0) {
+      buffer.write(hours.toString().padLeft(2, '0'));
+      buffer.write(':');
+    }
+    buffer.write(minutes.toString().padLeft(2, '0'));
+    buffer.write(':');
+    buffer.write(seconds.toString().padLeft(2, '0'));
+    return buffer.toString();
+  }
+
+  Future<void> _cambiarPeriodo() async {
+    final currentIndex = _periodos.indexOf(_periodoActual);
+    final nextIndex = (currentIndex + 1) % _periodos.length;
+    setState(() {
+      _periodoActual = _periodos[nextIndex];
+    });
     await FirebaseFirestore.instance.collection('Partidos').doc(widget.partidoId).update({
-      'segundoPartido': segundos ?? _elapsedSeconds,
-      'periodo': _periodoActual,
+      'periodoActual': _periodoActual,
     });
   }
 
-  Future<void> _actualizarMarcadorEnFirestore() async {
+  Future<void> _editarGoles({required bool esLocal}) async {
+    final controller = TextEditingController(
+      text: esLocal ? _golesLocal.toString() : _golesVisitante.toString(),
+    );
+
+    final confirmado = await showDialog<int>(
+      context: context,
+      builder: (context) {
+        return AlertDialog(
+          title: Text(esLocal ? 'Goles local' : 'Goles visitante'),
+          content: TextField(
+            controller: controller,
+            keyboardType: TextInputType.number,
+            decoration: const InputDecoration(hintText: 'Introduce goles'),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(),
+              child: const Text('Cancelar'),
+            ),
+            TextButton(
+              onPressed: () {
+                final value = int.tryParse(controller.text) ?? 0;
+                Navigator.of(context).pop(value);
+              },
+              child: const Text('Guardar'),
+            ),
+          ],
+        );
+      },
+    );
+
+    if (confirmado == null) return;
+
+    setState(() {
+      if (esLocal) {
+        _golesLocal = confirmado;
+      } else {
+        _golesVisitante = confirmado;
+      }
+    });
+
     await FirebaseFirestore.instance.collection('Partidos').doc(widget.partidoId).update({
       'golesLocal': _golesLocal,
       'golesVisitante': _golesVisitante,
     });
   }
 
-  Future<void> _finalizarPartido() async {
-    if (_isRunning) {
-      _stopTimer();
-    }
+  Future<void> _persistTiempo() async {
+    await FirebaseFirestore.instance.collection('Partidos').doc(widget.partidoId).update({
+      'segundoPartido': _elapsed.inSeconds,
+      'periodoActual': _periodoActual,
+    });
+  }
 
+  Future<void> _finalizarPartido() async {
+    final aceptar = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Finalizar partido'),
+        content: const Text(
+          '¿Seguro que quieres finalizar el partido? No podrás seguir registrando acciones.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('Cancelar'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            child: const Text('Aceptar'),
+          ),
+        ],
+      ),
+    );
+
+    if (aceptar != true) return;
+
+    _pauseTimer();
     await FirebaseFirestore.instance.collection('Partidos').doc(widget.partidoId).update({
       'estado': 'Finalizado',
-      'segundoPartido': _elapsedSeconds,
-      'periodo': _periodoActual,
+      'segundoPartido': _elapsed.inSeconds,
+      'periodoActual': _periodoActual,
     });
 
     if (mounted) {
-      _mostrarSnackBar('Partido finalizado');
+      Navigator.of(context).pop();
     }
   }
 
-  void _cargarConvocadosSiNecesario(Partido partido) {
-    final ids = partido.jugadoresConvocados;
-    if (_convocadosFuture != null && listEquals(_ultimaListaConvocados, ids)) {
-      return;
-    }
-    _ultimaListaConvocados = List<int>.from(ids);
-    _convocadosFuture = _obtenerConvocados(ids);
+  Map<String, dynamic> _datosAccionBase() {
+    return {
+      'equipo': _equipoSeleccionado,
+      'dorsal': _dorsalSeleccionado,
+      'zona': _zonaSeleccionada,
+      'periodo': _periodoActual,
+      'tiempoJuego': _formatDuration(_elapsed),
+    };
   }
 
-  Future<List<Jugador>> _obtenerConvocados(List<int> ids) async {
-    if (ids.isEmpty) return [];
-
-    final jugadores = <Jugador>[];
-    for (var i = 0; i < ids.length; i += 10) {
-      final chunk = ids.skip(i).take(10).toList();
-      final snapshot = await FirebaseFirestore.instance
-          .collection('Jugadores')
-          .where('idJugador', whereIn: chunk)
-          .get();
-      jugadores.addAll(
-        snapshot.docs.map((doc) => Jugador.fromDoc(doc.id, doc.data())),
-      );
-    }
-
-    jugadores.sort((a, b) => a.dorsal.compareTo(b.dorsal));
-    return jugadores;
-  }
-
-  Future<void> _registrarEvento(Partido partido) async {
-    final equipoId = _equipoSeleccionado ?? partido.equipoLocalId;
-    final notaFinal = _notaController.text.trim();
-
-    if (equipoId.isEmpty) {
-      _mostrarSnackBar('Selecciona un equipo para registrar el evento');
-      return;
-    }
-
-    final eventoRef = FirebaseFirestore.instance
-        .collection('Partidos')
-        .doc(widget.partidoId)
-        .collection('Eventos')
-        .doc();
-
-    final evento = EventoPartido(
-      id: eventoRef.id,
-      timestamp: DateTime.now(),
-      periodo: _periodoActual,
-      segundoPartido: _elapsedSeconds,
-      equipoId: equipoId,
-      jugadorId: _jugadorSeleccionado,
-      tipoAccion: _selectedAccion,
-      fase: _faseSeleccionada,
-      zona: _zonaSeleccionada,
-      resultado: null,
-      esPenalty: false,
-      nota: notaFinal.isEmpty ? null : notaFinal,
-    );
-
-    try {
-      await EventosService.addEvento(widget.partidoId, evento);
-      if (_selectedAccion == TipoAccion.gol) {
-        setState(() {
-          if (equipoId == partido.equipoLocalId) {
-            _golesLocal++;
-          } else if (equipoId == partido.equipoVisitanteId) {
-            _golesVisitante++;
-          }
-        });
-        await _actualizarMarcadorEnFirestore();
-      }
-      _mostrarSnackBar('Evento registrado');
-      setState(() {
-        _jugadorSeleccionado = null;
-        _notaController.clear();
-      });
-    } catch (e) {
-      _mostrarSnackBar('Error al registrar evento: $e');
-    }
+  void _seleccionarJugador(String equipo, int dorsal) {
+    setState(() {
+      _equipoSeleccionado = equipo;
+      _dorsalSeleccionado = dorsal;
+    });
   }
 
   void _mostrarSnackBar(String mensaje) {
-    if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(content: Text(mensaje)),
     );
@@ -294,130 +323,106 @@ class _PartidoEnJuegoScreenState extends State<PartidoEnJuegoScreen> {
             return const Center(child: Text('No se encontró el partido.'));
           }
 
-          final partido =
-              Partido.fromDoc(snapshot.data!.id, snapshot.data!.data()!);
-          WidgetsBinding.instance
-              .addPostFrameCallback((_) => _sincronizarPartido(partido));
-          _cargarConvocadosSiNecesario(partido);
-          _equipoSeleccionado ??= partido.equipoLocalId;
+          final data = snapshot.data!.data()!;
+          final partido = Partido.fromDoc(snapshot.data!.id, data);
+          _syncPartido(partido, data);
 
-          return Padding(
+          return SingleChildScrollView(
             padding: const EdgeInsets.all(16),
-            child: SingleChildScrollView(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  _PartidoHeader(
-                    partido: partido,
-                    golesLocal: _golesLocal,
-                    golesVisitante: _golesVisitante,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                _MarcadorWidget(
+                  partido: partido,
+                  golesLocal: _golesLocal,
+                  golesVisitante: _golesVisitante,
+                  periodoActual: _periodoActual,
+                  tiempo: _formatDuration(_elapsed),
+                  isPlaying: _isPlaying,
+                  onEditLocal: () => _editarGoles(esLocal: true),
+                  onEditVisitante: () => _editarGoles(esLocal: false),
+                  onCambiarPeriodo: _cambiarPeriodo,
+                  onStart: _startTimer,
+                  onPause: _pauseTimer,
+                  onEditTiempo: _editarTiempo,
+                ),
+                const SizedBox(height: 12),
+                FilledButton.icon(
+                  onPressed: _finalizarPartido,
+                  icon: const Icon(Icons.flag),
+                  label: const Text('Finalizar partido'),
+                  style: FilledButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(vertical: 14),
                   ),
-                  const SizedBox(height: 16),
-                  _Cronometro(
-                    formato: _formatDuration(_elapsedSeconds),
-                    periodo: _periodoActual,
-                    isRunning: _isRunning,
-                    onStart: _startTimer,
-                    onStop: _stopTimer,
-                    onReset: _reiniciarPeriodo,
-                    onPeriodoChanged: (valor) {
-                      if (valor < 1) return;
+                ),
+                const SizedBox(height: 16),
+                Text(
+                  'Zona de lanzamiento',
+                  style: Theme.of(context).textTheme.titleMedium,
+                ),
+                const SizedBox(height: 8),
+                SizedBox(
+                  height: 260,
+                  child: ZonaLanzamientoSelector(
+                    zonaSeleccionada: _zonaSeleccionada,
+                    onZonaSelected: (zona) {
                       setState(() {
-                        _periodoActual = valor;
+                        _zonaSeleccionada = zona;
                       });
-                      _persistTiempoPeriodo();
                     },
                   ),
-                  const SizedBox(height: 8),
-                  Align(
-                    alignment: Alignment.centerRight,
-                    child: FilledButton.icon(
-                      onPressed: _finalizarPartido,
-                      icon: const Icon(Icons.flag),
-                      label: const Text('Finalizar partido'),
-                    ),
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  _zonaSeleccionada == null
+                      ? 'Toca una zona para seleccionarla'
+                      : 'Zona seleccionada: $_zonaSeleccionada',
+                  textAlign: TextAlign.center,
+                ),
+                const SizedBox(height: 16),
+                _JugadoresActivosSection(
+                  titulo: partido.equipoLocalNombre.toUpperCase(),
+                  dorsales: _jugadoresLocal,
+                  seleccionadoEquipo: _equipoSeleccionado,
+                  seleccionadoDorsal: _dorsalSeleccionado,
+                  equipoClave: 'local',
+                  onTap: _seleccionarJugador,
+                ),
+                const SizedBox(height: 8),
+                _JugadoresActivosSection(
+                  titulo: partido.equipoVisitanteNombre.toUpperCase(),
+                  dorsales: _jugadoresVisitante,
+                  seleccionadoEquipo: _equipoSeleccionado,
+                  seleccionadoDorsal: _dorsalSeleccionado,
+                  equipoClave: 'visitante',
+                  onTap: _seleccionarJugador,
+                ),
+                const SizedBox(height: 16),
+                FilledButton.icon(
+                  onPressed: () {
+                    if (_dorsalSeleccionado == null || _equipoSeleccionado == null) {
+                      _mostrarSnackBar('Selecciona primero un jugador a sustituir');
+                      return;
+                    }
+
+                    Navigator.of(context).push(
+                      MaterialPageRoute(
+                        builder: (_) => CambiosScreen(
+                          partidoId: widget.partidoId,
+                          equipo: _equipoSeleccionado!,
+                          dorsal: _dorsalSeleccionado!,
+                          datosAccionBase: _datosAccionBase(),
+                        ),
+                      ),
+                    );
+                  },
+                  icon: const Icon(Icons.flag),
+                  label: const Text('Cambios'),
+                  style: FilledButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(vertical: 14),
                   ),
-                  const SizedBox(height: 16),
-                  Padding(
-                    padding:
-                        const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.stretch,
-                      children: [
-                        Text(
-                          'Zona de lanzamiento',
-                          style: Theme.of(context).textTheme.titleMedium,
-                        ),
-                        const SizedBox(height: 8),
-                        PistaHandballOverlay(
-                          zonaSeleccionada: _zonaSeleccionada,
-                          onZonaSelected: (zona) {
-                            setState(() {
-                              _zonaSeleccionada = zona; // MODIFICADO: selección sobre imagen
-                            });
-                          },
-                        ),
-                        const SizedBox(height: 8),
-                        Text(
-                          _zonaSeleccionada != null
-                              ? 'Zona seleccionada: ${_zonaSeleccionada!.label}'
-                              : 'Toca una zona para seleccionarla',
-                          textAlign: TextAlign.center,
-                        ),
-                      ],
-                    ),
-                  ),
-                  Padding(
-                    padding:
-                        const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.stretch,
-                      children: [
-                        Text(
-                          'Portería (zonas 1-9)',
-                          style: Theme.of(context).textTheme.titleMedium,
-                        ),
-                        const SizedBox(height: 8),
-                        AspectRatio(
-                          aspectRatio: 4 / 3,
-                          child: ClipRRect(
-                            borderRadius: BorderRadius.circular(12),
-                            child: Image.asset(
-                              'assets/pista/porteria_zonas.png',
-                              fit: BoxFit.cover,
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                  const SizedBox(height: 16),
-                  _ConvocadosList(future: _convocadosFuture),
-                  const SizedBox(height: 16),
-                  _RegistroEvento(
-                    partido: partido,
-                    convocadosFuture: _convocadosFuture,
-                    equipoSeleccionado: _equipoSeleccionado,
-                    jugadorSeleccionado: _jugadorSeleccionado,
-                    tipoAccion: _selectedAccion,
-                    fase: _faseSeleccionada,
-                    notaController: _notaController,
-                    onEquipoChange: (value) => setState(() {
-                      _equipoSeleccionado = value;
-                    }),
-                    onJugadorChange: (value) => setState(() {
-                      _jugadorSeleccionado = value;
-                    }),
-                    onAccionChange: (value) => setState(() {
-                      _selectedAccion = value;
-                    }),
-                    onFaseChange: (value) => setState(() {
-                      _faseSeleccionada = value;
-                    }),
-                    onGuardar: () => _registrarEvento(partido),
-                  ),
-                ],
-              ),
+                ),
+              ],
             ),
           );
         },
@@ -426,443 +431,319 @@ class _PartidoEnJuegoScreenState extends State<PartidoEnJuegoScreen> {
   }
 }
 
-class _PartidoHeader extends StatelessWidget {
-  const _PartidoHeader({
+class _MarcadorWidget extends StatelessWidget {
+  const _MarcadorWidget({
     required this.partido,
     required this.golesLocal,
     required this.golesVisitante,
+    required this.periodoActual,
+    required this.tiempo,
+    required this.isPlaying,
+    required this.onEditLocal,
+    required this.onEditVisitante,
+    required this.onCambiarPeriodo,
+    required this.onStart,
+    required this.onPause,
+    required this.onEditTiempo,
   });
 
   final Partido partido;
   final int golesLocal;
   final int golesVisitante;
+  final String periodoActual;
+  final String tiempo;
+  final bool isPlaying;
+  final VoidCallback onEditLocal;
+  final VoidCallback onEditVisitante;
+  final VoidCallback onCambiarPeriodo;
+  final VoidCallback onStart;
+  final VoidCallback onPause;
+  final VoidCallback onEditTiempo;
 
   @override
   Widget build(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
-    final estadoColor = _estadoChipColor(partido.estado, colorScheme);
 
     return Card(
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+      color: colorScheme.surface,
       child: Padding(
         padding: const EdgeInsets.all(16),
         child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
                 Expanded(
                   child: Text(
-                    '${partido.equipoLocalNombre} vs ${partido.equipoVisitanteNombre}',
-                    style: const TextStyle(
-                      fontSize: 18,
-                      fontWeight: FontWeight.bold,
-                    ),
+                    partido.equipoLocalNombre.toUpperCase(),
+                    style: const TextStyle(fontWeight: FontWeight.bold),
                   ),
                 ),
-                const SizedBox(width: 8),
-                Chip(
-                  label: Text(partido.estado),
-                  backgroundColor: estadoColor,
-                )
+                Expanded(
+                  child: Text(
+                    partido.equipoVisitanteNombre.toUpperCase(),
+                    textAlign: TextAlign.end,
+                    style: const TextStyle(fontWeight: FontWeight.bold),
+                  ),
+                ),
               ],
-            ),
-            const SizedBox(height: 4),
-            Text(
-              'Fecha: ${partido.fechaHora.day}/${partido.fechaHora.month}/${partido.fechaHora.year}  ${partido.fechaHora.hour.toString().padLeft(2, '0')}:${partido.fechaHora.minute.toString().padLeft(2, '0')}',
             ),
             const SizedBox(height: 12),
             Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                _ScoreBox(
-                  equipo: partido.equipoLocalNombre,
+                _GolesBox(
                   goles: golesLocal,
-                  color: colorScheme.primary,
+                  onLongPress: onEditLocal,
                 ),
-                const Text(
-                  '-',
-                  style: TextStyle(fontSize: 32, fontWeight: FontWeight.bold),
+                const Padding(
+                  padding: EdgeInsets.symmetric(horizontal: 12),
+                  child: Text(
+                    '-',
+                    style: TextStyle(fontSize: 32, fontWeight: FontWeight.bold),
+                  ),
                 ),
-                _ScoreBox(
-                  equipo: partido.equipoVisitanteNombre,
+                _GolesBox(
                   goles: golesVisitante,
-                  color: colorScheme.secondary,
+                  onLongPress: onEditVisitante,
                 ),
               ],
             ),
-            const SizedBox(height: 8),
-            Text('Periodo actual: ${partido.periodo}'),
+            const SizedBox(height: 12),
+            Row(
+              children: [
+                Expanded(
+                  child: InkWell(
+                    borderRadius: BorderRadius.circular(8),
+                    onTap: onCambiarPeriodo,
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(vertical: 8),
+                      child: Text(
+                        'Periodo actual: $periodoActual',
+                        style: const TextStyle(fontWeight: FontWeight.w600),
+                      ),
+                    ),
+                  ),
+                ),
+                GestureDetector(
+                  onTap: onStart,
+                  onDoubleTap: onPause,
+                  onLongPress: onEditTiempo,
+                  child: Text(
+                    tiempo,
+                    style: TextStyle(
+                      fontWeight: FontWeight.bold,
+                      fontSize: 18,
+                      color: isPlaying ? Colors.green : Colors.orange,
+                    ),
+                  ),
+                ),
+              ],
+            ),
           ],
         ),
       ),
     );
   }
+}
 
-  Color _estadoChipColor(String estado, ColorScheme colorScheme) {
-    switch (estado) {
-      case 'EnJuego':
-        return Colors.green.shade200;
-      case 'Finalizado':
-        return Colors.red.shade200;
-      default:
-        return colorScheme.surfaceVariant;
-    }
+class _GolesBox extends StatelessWidget {
+  const _GolesBox({required this.goles, required this.onLongPress});
+
+  final int goles;
+  final VoidCallback onLongPress;
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onLongPress: onLongPress,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+        decoration: BoxDecoration(
+          color: Colors.grey.shade200,
+          borderRadius: BorderRadius.circular(16),
+        ),
+        child: Text(
+          goles.toString(),
+          style: const TextStyle(fontSize: 32, fontWeight: FontWeight.bold),
+        ),
+      ),
+    );
   }
 }
 
-class _ScoreBox extends StatelessWidget {
-  const _ScoreBox({
-    required this.equipo,
-    required this.goles,
-    required this.color,
+class ZonaLanzamientoSelector extends StatefulWidget {
+  const ZonaLanzamientoSelector({
+    required this.onZonaSelected,
+    this.zonaSeleccionada,
+    super.key,
   });
 
-  final String equipo;
-  final int goles;
-  final Color color;
+  final ValueChanged<String> onZonaSelected;
+  final String? zonaSeleccionada;
+
+  @override
+  State<ZonaLanzamientoSelector> createState() => _ZonaLanzamientoSelectorState();
+}
+
+class _ZonaLanzamientoSelectorState extends State<ZonaLanzamientoSelector> {
+  final List<List<String>> _zonas = const [
+    ['L9D', 'C9C', 'L9I'],
+    ['L8D', 'C8C', 'L8I'],
+    ['E6D', 'L6D', 'C6C', 'L6I', 'E6I'],
+    ['7M1', '7M2'],
+  ];
+
+  @override
+  Widget build(BuildContext context) {
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final width = constraints.maxWidth;
+        final height = constraints.maxHeight > 0 ? constraints.maxHeight : width * 0.7;
+        return SizedBox(
+          width: width,
+          height: height,
+          child: Stack(
+            children: [
+              Positioned.fill(
+                child: ClipRRect(
+                  borderRadius: BorderRadius.circular(12),
+                  child: Image.asset(
+                    'assets/pista/pista_handball.png',
+                    fit: BoxFit.cover,
+                  ),
+                ),
+              ),
+              Positioned.fill(
+                child: GestureDetector(
+                  behavior: HitTestBehavior.opaque,
+                  onTapDown: (details) {
+                    final localPosition = details.localPosition;
+                    final rowHeight = height / _zonas.length;
+                    final rowIndex = (localPosition.dy / rowHeight).clamp(0, _zonas.length - 1).floor();
+                    final columnas = _zonas[rowIndex].length;
+                    final colWidth = width / columnas;
+                    final colIndex = (localPosition.dx / colWidth).clamp(0, columnas - 1).floor();
+                    final zona = _zonas[rowIndex][colIndex];
+                    widget.onZonaSelected(zona);
+                  },
+                  child: CustomPaint(
+                    painter: _ZonaGridPainter(
+                      zonas: _zonas,
+                      selected: widget.zonaSeleccionada,
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+}
+
+class _ZonaGridPainter extends CustomPainter {
+  _ZonaGridPainter({required this.zonas, this.selected});
+
+  final List<List<String>> zonas;
+  final String? selected;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final paint = Paint()
+      ..color = Colors.black54
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 1.2;
+
+    final rowHeight = size.height / zonas.length;
+
+    for (int i = 0; i < zonas.length; i++) {
+      final columns = zonas[i].length;
+      final columnWidth = size.width / columns;
+
+      final top = i * rowHeight;
+
+      for (int j = 0; j < columns; j++) {
+        final left = j * columnWidth;
+        final rect = Rect.fromLTWH(left, top, columnWidth, rowHeight);
+        canvas.drawRect(rect, paint);
+
+        if (zonas[i][j] == selected) {
+          final highlight = Paint()
+            ..color = Colors.yellow.withOpacity(0.25)
+            ..style = PaintingStyle.fill;
+          canvas.drawRect(rect, highlight);
+        }
+      }
+    }
+  }
+
+  @override
+  bool shouldRepaint(covariant _ZonaGridPainter oldDelegate) {
+    return oldDelegate.selected != selected || oldDelegate.zonas != zonas;
+  }
+}
+
+class _JugadoresActivosSection extends StatelessWidget {
+  const _JugadoresActivosSection({
+    required this.titulo,
+    required this.dorsales,
+    required this.seleccionadoEquipo,
+    required this.seleccionadoDorsal,
+    required this.equipoClave,
+    required this.onTap,
+  });
+
+  final String titulo;
+  final List<int> dorsales;
+  final String? seleccionadoEquipo;
+  final int? seleccionadoDorsal;
+  final String equipoClave;
+  final void Function(String equipo, int dorsal) onTap;
 
   @override
   Widget build(BuildContext context) {
     return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Text(
-          equipo,
-          style: const TextStyle(fontWeight: FontWeight.w600),
+          titulo,
+          style: Theme.of(context).textTheme.titleMedium,
         ),
-        const SizedBox(height: 4),
-        Container(
-          padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 10),
-          decoration: BoxDecoration(
-            color: color.withOpacity(0.15),
-            borderRadius: BorderRadius.circular(12),
-          ),
-          child: Text(
-            goles.toString(),
-            style: const TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
-          ),
-        ),
-      ],
-    );
-  }
-}
-
-class _Cronometro extends StatelessWidget {
-  const _Cronometro({
-    required this.formato,
-    required this.periodo,
-    required this.isRunning,
-    required this.onStart,
-    required this.onStop,
-    required this.onReset,
-    required this.onPeriodoChanged,
-  });
-
-  final String formato;
-  final int periodo;
-  final bool isRunning;
-  final VoidCallback onStart;
-  final VoidCallback onStop;
-  final VoidCallback onReset;
-  final ValueChanged<int> onPeriodoChanged;
-
-  @override
-  Widget build(BuildContext context) {
-    return Card(
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const Text(
-              'Cronómetro',
-              style: TextStyle(fontWeight: FontWeight.bold),
-            ),
-            const SizedBox(height: 8),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const Text('Periodo'),
-                    Row(
-                      children: [
-                        IconButton(
-                          onPressed: periodo > 1
-                              ? () => onPeriodoChanged(periodo - 1)
-                              : null,
-                          icon: const Icon(Icons.remove_circle_outline),
-                        ),
-                        Text(
-                          'P$_periodLabel',
-                          style: const TextStyle(
-                            fontSize: 20,
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
-                        IconButton(
-                          onPressed: () => onPeriodoChanged(periodo + 1),
-                          icon: const Icon(Icons.add_circle_outline),
-                        ),
-                      ],
-                    ),
-                  ],
+        const SizedBox(height: 8),
+        Wrap(
+          spacing: 8,
+          runSpacing: 8,
+          children: dorsales.map((dorsal) {
+            final isSelected = seleccionadoEquipo == equipoClave && seleccionadoDorsal == dorsal;
+            return GestureDetector(
+              onTap: () => onTap(equipoClave, dorsal),
+              child: AnimatedContainer(
+                duration: const Duration(milliseconds: 200),
+                width: 56,
+                height: 56,
+                decoration: BoxDecoration(
+                  color: isSelected ? Colors.amber.shade300 : Colors.amber.shade100,
+                  shape: BoxShape.circle,
+                  boxShadow: isSelected
+                      ? [const BoxShadow(color: Colors.black26, blurRadius: 4, offset: Offset(0, 2))]
+                      : null,
                 ),
-                Text(
-                  formato,
-                  style: const TextStyle(
-                    fontSize: 32,
+                alignment: Alignment.center,
+                child: Text(
+                  dorsal.toString(),
+                  style: TextStyle(
                     fontWeight: FontWeight.bold,
+                    fontSize: 16,
+                    color: isSelected ? Colors.black : Colors.black87,
                   ),
                 ),
-              ],
-            ),
-            const SizedBox(height: 12),
-                Row(
-              mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-              children: [
-                ElevatedButton.icon(
-                  onPressed: isRunning ? null : onStart,
-                  icon: const Icon(Icons.play_arrow),
-                  label: const Text('Iniciar'),
-                ),
-                ElevatedButton.icon(
-                  onPressed: isRunning ? onStop : null,
-                  icon: const Icon(Icons.pause),
-                  label: const Text('Pausar'),
-                ),
-                ElevatedButton.icon(
-                  onPressed: onReset,
-                  icon: const Icon(Icons.restart_alt),
-                  label: const Text('Reiniciar periodo'),
-                ),
-              ],
-            )
-          ],
-        ),
-      ),
-    );
-  }
-
-  String get _periodLabel => periodo.toString().padLeft(2, '0');
-}
-
-class _ConvocadosList extends StatelessWidget {
-  const _ConvocadosList({required this.future});
-
-  final Future<List<Jugador>>? future;
-
-  @override
-  Widget build(BuildContext context) {
-    return Card(
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const Text(
-              'Convocados (local)',
-              style: TextStyle(fontWeight: FontWeight.bold),
-            ),
-            const SizedBox(height: 8),
-            if (future == null)
-              const Text('Cargando lista de convocados...')
-            else
-              FutureBuilder<List<Jugador>>(
-                future: future,
-                builder: (context, snapshot) {
-                  if (snapshot.connectionState == ConnectionState.waiting) {
-                    return const Center(child: CircularProgressIndicator());
-                  }
-
-                  final jugadores = snapshot.data ?? [];
-                  if (jugadores.isEmpty) {
-                    return const Text('No hay jugadores convocados disponibles.');
-                  }
-
-                  return Column(
-                    children: jugadores
-                        .map(
-                          (j) => ListTile(
-                            dense: true,
-                            leading: CircleAvatar(
-                              child: Text(j.dorsal.toString()),
-                            ),
-                            title: Text(j.nombre),
-                            subtitle: Text(j.posicionAtaque),
-                          ),
-                        )
-                        .toList(),
-                  );
-                },
-              )
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-class _RegistroEvento extends StatelessWidget {
-  const _RegistroEvento({
-    required this.partido,
-    required this.convocadosFuture,
-    required this.equipoSeleccionado,
-    required this.jugadorSeleccionado,
-    required this.tipoAccion,
-    required this.fase,
-    required this.notaController,
-    required this.onEquipoChange,
-    required this.onJugadorChange,
-    required this.onAccionChange,
-    required this.onFaseChange,
-    required this.onGuardar,
-  });
-
-  final Partido partido;
-  final Future<List<Jugador>>? convocadosFuture;
-  final String? equipoSeleccionado;
-  final String? jugadorSeleccionado;
-  final TipoAccion tipoAccion;
-  final FaseJuego fase;
-  final TextEditingController notaController;
-  final ValueChanged<String?> onEquipoChange;
-  final ValueChanged<String?> onJugadorChange;
-  final ValueChanged<TipoAccion> onAccionChange;
-  final ValueChanged<FaseJuego> onFaseChange;
-  final VoidCallback onGuardar;
-
-  @override
-  Widget build(BuildContext context) {
-    return Card(
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const Text(
-              'Registrar evento',
-              style: TextStyle(fontWeight: FontWeight.bold),
-            ),
-            const SizedBox(height: 8),
-            Text('Equipo'),
-            const SizedBox(height: 4),
-            SegmentedButton<String>(
-              segments: [
-                ButtonSegment(
-                  value: partido.equipoLocalId,
-                  label: Text(partido.equipoLocalNombre),
-                ),
-                ButtonSegment(
-                  value: partido.equipoVisitanteId,
-                  label: Text(partido.equipoVisitanteNombre),
-                ),
-              ],
-              selected: {equipoSeleccionado ?? partido.equipoLocalId},
-              onSelectionChanged: (value) => onEquipoChange(value.first),
-            ),
-            const SizedBox(height: 12),
-            Text('Acción'),
-            const SizedBox(height: 4),
-            Wrap(
-              spacing: 8,
-              children: [
-                ChoiceChip(
-                  label: const Text('Gol'),
-                  selected: tipoAccion == TipoAccion.gol,
-                  onSelected: (_) => onAccionChange(TipoAccion.gol),
-                ),
-                ChoiceChip(
-                  label: const Text('Parada'),
-                  selected: tipoAccion == TipoAccion.parada,
-                  onSelected: (_) => onAccionChange(TipoAccion.parada),
-                ),
-                ChoiceChip(
-                  label: const Text('Falta'),
-                  selected: tipoAccion == TipoAccion.falta,
-                  onSelected: (_) => onAccionChange(TipoAccion.falta),
-                ),
-              ],
-            ),
-            const SizedBox(height: 12),
-            Text('Fase'),
-            const SizedBox(height: 4),
-            SegmentedButton<FaseJuego>(
-              segments: const [
-                ButtonSegment(
-                  value: FaseJuego.ataque,
-                  label: Text('Ataque'),
-                  icon: Icon(Icons.sports_handball),
-                ),
-                ButtonSegment(
-                  value: FaseJuego.defensa,
-                  label: Text('Defensa'),
-                  icon: Icon(Icons.shield_outlined),
-                ),
-              ],
-              selected: {fase},
-              onSelectionChanged: (value) => onFaseChange(value.first),
-            ),
-            const SizedBox(height: 12),
-            Text('Jugador (opcional)'),
-            const SizedBox(height: 4),
-            if (convocadosFuture == null)
-              const Text('Cargando jugadores...')
-            else
-              FutureBuilder<List<Jugador>>(
-                future: convocadosFuture,
-                builder: (context, snapshot) {
-                  if (snapshot.connectionState == ConnectionState.waiting) {
-                    return const Center(child: CircularProgressIndicator());
-                  }
-
-                  final jugadores = snapshot.data ?? [];
-                  return DropdownButtonFormField<String?>(
-                    value: jugadorSeleccionado,
-                    decoration: const InputDecoration(
-                      labelText: 'Selecciona jugador',
-                    ),
-                    items: [
-                      const DropdownMenuItem<String?>(
-                        value: null,
-                        child: Text('Sin jugador asociado'),
-                      ),
-                      ...jugadores.map(
-                        (j) => DropdownMenuItem<String?>(
-                          value: j.idJugador.toString(),
-                          child: Text('${j.dorsal} - ${j.nombre}'),
-                        ),
-                      ),
-                    ],
-                    onChanged: onJugadorChange,
-                  );
-                },
               ),
-            const SizedBox(height: 12),
-            TextFormField(
-              controller: notaController,
-              decoration: const InputDecoration(
-                labelText: 'Nota (opcional)',
-              ),
-              maxLines: 2,
-            ),
-            const SizedBox(height: 16),
-            SizedBox(
-              width: double.infinity,
-              child: ElevatedButton.icon(
-                onPressed: onGuardar,
-                icon: const Icon(Icons.save),
-                label: const Text('Guardar evento'),
-              ),
-            )
-          ],
+            );
+          }).toList(),
         ),
-      ),
+      ],
     );
   }
 }
