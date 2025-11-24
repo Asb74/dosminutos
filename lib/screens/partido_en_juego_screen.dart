@@ -545,8 +545,12 @@ class _PartidoEnJuegoScreenState extends State<PartidoEnJuegoScreen> {
   List<Map<String, dynamic>> _parseJugadoresEnJuego(dynamic data) {
     final lista = (data as List<dynamic>? ?? []);
     return lista
-        .where((e) => (e as Map<String, dynamic>)['enJuego'] == true)
         .map((e) => e as Map<String, dynamic>)
+        .where((m) {
+          final enJuego = m['enJuego'];
+          // solo excluimos cuando es false explícito
+          return enJuego != false;
+        })
         .toList();
   }
 
@@ -561,26 +565,6 @@ class _PartidoEnJuegoScreenState extends State<PartidoEnJuegoScreen> {
     final jugadoresVisitanteEnJuego =
         _parseJugadoresEnJuego(data['jugadoresEnJuegoVisitante']);
 
-    if (_initialized && _partido?.id == partido.id) {
-      final haCambiadoLocal = !_listasIguales(_jugadoresLocal, jugadoresLocalEnJuego);
-      final haCambiadoVisitante =
-          !_listasIguales(_jugadoresVisitante, jugadoresVisitanteEnJuego);
-
-      setState(() {
-        _partido = partido;
-        if (haCambiadoLocal) _jugadoresLocal = jugadoresLocalEnJuego;
-        if (haCambiadoVisitante) _jugadoresVisitante = jugadoresVisitanteEnJuego;
-        _golesLocal = partido.golesLocal;
-        _golesVisitante = partido.golesVisitante;
-        _periodoActual = (data['periodoActual'] as String?) ?? _periodoActual;
-        final segundos = (data['segundoPartido'] as num?)?.toInt() ?? 0;
-        if (!_isPlaying) {
-          _elapsed = Duration(seconds: segundos);
-        }
-      });
-      return;
-    }
-
     setState(() {
       _partido = partido;
       _jugadoresLocal = jugadoresLocalEnJuego;
@@ -589,20 +573,11 @@ class _PartidoEnJuegoScreenState extends State<PartidoEnJuegoScreen> {
       _golesVisitante = partido.golesVisitante;
       _periodoActual = (data['periodoActual'] as String?) ?? _periodoActual;
       final segundos = (data['segundoPartido'] as num?)?.toInt() ?? 0;
-      _elapsed = Duration(seconds: segundos);
+      if (!_isPlaying) {
+        _elapsed = Duration(seconds: segundos);
+      }
       _initialized = true;
     });
-  }
-
-  bool _listasIguales(List<Map<String, dynamic>> a, List<Map<String, dynamic>> b) {
-    if (identical(a, b)) return true;
-    if (a.length != b.length) return false;
-    for (int i = 0; i < a.length; i++) {
-      if ((a[i]['dorsal'] as num?)?.toInt() != (b[i]['dorsal'] as num?)?.toInt()) {
-        return false;
-      }
-    }
-    return true;
   }
 
   void _onSeleccionPorteria(String codigo) {
