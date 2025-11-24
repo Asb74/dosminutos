@@ -170,10 +170,8 @@ class _PartidoEnJuegoScreenState extends State<PartidoEnJuegoScreen> {
   int? _dorsalSeleccionado;
   String? _zonaSeleccionada;
   String? _zonaPorteriaSeleccionada;
-  bool _mostrandoAcciones = false;
-  bool _mostrandoPorteria = false;
+  String? _accionSeleccionada;
 
-  String? _accionPendiente;
   String? _contextoPendiente;
 
   bool _initialized = false;
@@ -427,56 +425,15 @@ class _PartidoEnJuegoScreenState extends State<PartidoEnJuegoScreen> {
     };
   }
 
-  void _resetSeleccion() {
+  void _resetFlujoAccion() {
     setState(() {
-      _equipoSeleccionado = null;
-      _dorsalSeleccionado = null;
       _zonaSeleccionada = null;
       _zonaPorteriaSeleccionada = null;
-      _accionPendiente = null;
+      _accionSeleccionada = null;
+      _equipoSeleccionado = null;
+      _dorsalSeleccionado = null;
       _contextoPendiente = null;
-      _mostrandoPorteria = false;
-      _mostrandoAcciones = false;
     });
-  }
-
-  void _onSeleccionPorteria(String codigo) {
-    setState(() {
-      _zonaPorteriaSeleccionada = codigo;
-      _mostrandoPorteria = false;
-    });
-
-    if (_accionPendiente != null && _contextoPendiente != null) {
-      final accion = _accionPendiente!;
-      final contexto = _contextoPendiente!;
-      _accionPendiente = null;
-      _contextoPendiente = null;
-      _registrarAccion(contexto: contexto, accion: accion);
-    }
-  }
-
-  Future<void> _registrarAccion({
-    required String contexto, // 'ataque' o 'defensa'
-    required String accion, // 'Gol', 'Parada', etc.
-  }) async {
-    if (_equipoSeleccionado == null ||
-        _dorsalSeleccionado == null ||
-        _zonaSeleccionada == null) {
-      _mostrarSnackBar('Selecciona jugador y zona antes de registrar la acción');
-      return;
-    }
-
-    final datosBase = _datosAccionBase();
-    final datos = {
-      ...datosBase,
-      'contexto': contexto,
-      'accion': accion,
-    };
-
-    // De momento solo haz un print, ya conectaremos con Firestore después.
-    print('ACCION REGISTRADA: $datos');
-
-    _resetSeleccion();
   }
 
   bool _requierePorteria(String accion) {
@@ -484,23 +441,43 @@ class _PartidoEnJuegoScreenState extends State<PartidoEnJuegoScreen> {
   }
 
   void _onAccionSeleccionada(String contexto, String accion) {
-    if (_requierePorteria(accion)) {
-      setState(() {
-        _mostrandoPorteria = true;
-        _accionPendiente = accion;
-        _contextoPendiente = contexto;
-      });
+    if (_zonaSeleccionada == null) {
+      _mostrarSnackBar('Selecciona primero una zona de juego');
       return;
     }
 
-    _registrarAccion(contexto: contexto, accion: accion);
+    setState(() {
+      _accionSeleccionada = accion;
+      _contextoPendiente = contexto;
+      _zonaPorteriaSeleccionada = _requierePorteria(accion)
+          ? null
+          : _zonaPorteriaSeleccionada;
+      _equipoSeleccionado = null;
+      _dorsalSeleccionado = null;
+    });
   }
 
   void _seleccionarJugador(String equipo, int dorsal) {
+    final yaSeleccionado =
+        _equipoSeleccionado == equipo && _dorsalSeleccionado == dorsal;
+
     setState(() {
-      _equipoSeleccionado = equipo;
-      _dorsalSeleccionado = dorsal;
+      if (yaSeleccionado) {
+        _equipoSeleccionado = null;
+        _dorsalSeleccionado = null;
+      } else {
+        _equipoSeleccionado = equipo;
+        _dorsalSeleccionado = dorsal;
+      }
     });
+
+    final accion = _accionSeleccionada;
+    if (accion != null &&
+        _zonaSeleccionada != null &&
+        (!_requierePorteria(accion) || _zonaPorteriaSeleccionada != null) &&
+        !yaSeleccionado) {
+      _confirmarAccionConJugador();
+    }
   }
 
   void _mostrarSnackBar(String mensaje) {
@@ -509,33 +486,86 @@ class _PartidoEnJuegoScreenState extends State<PartidoEnJuegoScreen> {
     );
   }
 
-  void _syncPartido(Partido partido, Map<String, dynamic> data) {
+  List<int> _parseJugadoresEnJuego(dynamic data) {
+    return (data as List<dynamic>? ?? [])
+        .map((e) => (e as num?)?.toInt())
+        .whereType<int>()
+        .toList();
+  }
+
+  int? _buscarPorteroInicial(List<Map<String, dynamic>> convocados) {
+    for (final jugador in convocados) {
+      final posicion = (jugador['posicion'] as String? ?? '').toLowerCase();
+      if (posicion == 'portero') {
+        return (jugador['dorsal'] as num?)?.toInt();
+      }
+    }
+    return null;
+  }
+
+  List<int> _generarJugadoresIniciales(List<Map<String, dynamic>> convocados) {
+    final dorsalesOrdenados = convocados
+        .map((j) => (j['dorsal'] as num?)?.toInt())
+        .whereType<int>()
+        .toList()
+      ..sort();
+
+    if (dorsalesOrdenados.isEmpty) return [];
+
+    final portero = _buscarPorteroInicial(convocados) ?? dorsalesOrdenados.first;
+    final resto = dorsalesOrdenados.where((d) => d != portero).toList();
+    return [portero, ...resto];
+  }
+
+  int? _getPorteroActualLocal() =>
+      _jugadoresLocal.isNotEmpty ? _jugadoresLocal.first : null;
+  int? _getPorteroActualVisitante() =>
+      _jugadoresVisitante.isNotEmpty ? _jugadoresVisitante.first : null;
+
+  Future<void> _syncPartido(Partido partido, Map<String, dynamic> data) async {
     final convocadosLocal = (data['convocadosLocal'] as List<dynamic>? ?? [])
-        .cast<Map<String, dynamic>>();
+        .whereType<Map<String, dynamic>>()
+        .map((e) => Map<String, dynamic>.from(e))
+        .toList();
     final convocadosVisitante =
         (data['convocadosVisitante'] as List<dynamic>? ?? [])
-            .cast<Map<String, dynamic>>();
+            .whereType<Map<String, dynamic>>()
+            .map((e) => Map<String, dynamic>.from(e))
+            .toList();
 
-    final nuevosLocal = convocadosLocal
-        .where((j) => j['enJuego'] == true)
-        .map<int>((j) => (j['dorsal'] as num).toInt())
-        .toList();
+    var jugadoresLocalEnJuego =
+        _parseJugadoresEnJuego(data['jugadoresEnJuegoLocal']);
+    var jugadoresVisitanteEnJuego =
+        _parseJugadoresEnJuego(data['jugadoresEnJuegoVisitante']);
 
-    final nuevosVisitante = convocadosVisitante
-        .where((j) => j['enJuego'] == true)
-        .map<int>((j) => (j['dorsal'] as num).toInt())
-        .toList();
+    final updates = <String, dynamic>{};
+
+    if (jugadoresLocalEnJuego.isEmpty) {
+      jugadoresLocalEnJuego = _generarJugadoresIniciales(convocadosLocal);
+      updates['jugadoresEnJuegoLocal'] = jugadoresLocalEnJuego;
+    }
+
+    if (jugadoresVisitanteEnJuego.isEmpty) {
+      jugadoresVisitanteEnJuego = _generarJugadoresIniciales(convocadosVisitante);
+      updates['jugadoresEnJuegoVisitante'] = jugadoresVisitanteEnJuego;
+    }
+
+    if (updates.isNotEmpty) {
+      await FirebaseFirestore.instance
+          .collection('Partidos')
+          .doc(widget.partidoId)
+          .update(updates);
+    }
 
     if (_initialized && _partido?.id == partido.id) {
-      // Solo actualiza si algo ha cambiado para evitar parpadeo
-      final haCambiadoLocal = !_listasIguales(_jugadoresLocal, nuevosLocal);
+      final haCambiadoLocal = !_listasIguales(_jugadoresLocal, jugadoresLocalEnJuego);
       final haCambiadoVisitante =
-          !_listasIguales(_jugadoresVisitante, nuevosVisitante);
+          !_listasIguales(_jugadoresVisitante, jugadoresVisitanteEnJuego);
 
       setState(() {
         _partido = partido;
-        if (haCambiadoLocal) _jugadoresLocal = nuevosLocal;
-        if (haCambiadoVisitante) _jugadoresVisitante = nuevosVisitante;
+        if (haCambiadoLocal) _jugadoresLocal = jugadoresLocalEnJuego;
+        if (haCambiadoVisitante) _jugadoresVisitante = jugadoresVisitanteEnJuego;
         _golesLocal = partido.golesLocal;
         _golesVisitante = partido.golesVisitante;
         _periodoActual = (data['periodoActual'] as String?) ?? _periodoActual;
@@ -547,11 +577,10 @@ class _PartidoEnJuegoScreenState extends State<PartidoEnJuegoScreen> {
       return;
     }
 
-    // Primera vez que se sincroniza
     setState(() {
       _partido = partido;
-      _jugadoresLocal = nuevosLocal;
-      _jugadoresVisitante = nuevosVisitante;
+      _jugadoresLocal = jugadoresLocalEnJuego;
+      _jugadoresVisitante = jugadoresVisitanteEnJuego;
       _golesLocal = partido.golesLocal;
       _golesVisitante = partido.golesVisitante;
       _periodoActual = (data['periodoActual'] as String?) ?? _periodoActual;
@@ -569,6 +598,90 @@ class _PartidoEnJuegoScreenState extends State<PartidoEnJuegoScreen> {
       if (a[i] != b[i]) return false;
     }
     return true;
+  }
+
+  void _onSeleccionPorteria(String codigo) {
+    setState(() {
+      _zonaPorteriaSeleccionada = codigo;
+    });
+  }
+
+  Future<void> _confirmarAccionConJugador() async {
+    final accion = _accionSeleccionada;
+    if (accion == null ||
+        _zonaSeleccionada == null ||
+        _equipoSeleccionado == null ||
+        _dorsalSeleccionado == null) {
+      _mostrarSnackBar('Selecciona zona, acción y jugador principal.');
+      return;
+    }
+
+    if (_requierePorteria(accion) && _zonaPorteriaSeleccionada == null) {
+      _mostrarSnackBar('Selecciona la zona de la portería.');
+      return;
+    }
+
+    final equipoPrincipal = _equipoSeleccionado!;
+    final partidoRef =
+        FirebaseFirestore.instance.collection('Partidos').doc(widget.partidoId);
+
+    String? equipoSecundario;
+    int? dorsalSecundario;
+
+    final porteroLocal = _getPorteroActualLocal();
+    final porteroVisitante = _getPorteroActualVisitante();
+
+    if (accion == 'Gol' || accion == 'Gol Contra' || accion == 'Parada') {
+      if (equipoPrincipal == 'local') {
+        equipoSecundario = 'visitante';
+        dorsalSecundario = porteroVisitante;
+      } else {
+        equipoSecundario = 'local';
+        dorsalSecundario = porteroLocal;
+      }
+    } else if (accion == 'Pasivo') {
+      equipoSecundario = equipoPrincipal;
+    }
+
+    final datos = {
+      'partidoId': widget.partidoId,
+      'equipoPrincipal': equipoPrincipal,
+      'dorsalPrincipal': _dorsalSeleccionado,
+      'equipoSecundario': equipoSecundario,
+      'dorsalSecundario': dorsalSecundario,
+      'zonaJuego': _zonaSeleccionada,
+      'zonaPorteria': _zonaPorteriaSeleccionada,
+      'accion': accion,
+      'contexto': _contextoPendiente,
+      'periodo': _periodoActual,
+      'segundoPartido': _elapsed.inSeconds,
+      'createdAt': FieldValue.serverTimestamp(),
+    };
+
+    await partidoRef.collection('ActaPartido').add(datos);
+
+    if (accion == 'Gol' || accion == 'Gol Contra') {
+      final incrementos = <String, dynamic>{};
+      if (accion == 'Gol') {
+        if (equipoPrincipal == 'local') {
+          incrementos['golesLocal'] = FieldValue.increment(1);
+        } else {
+          incrementos['golesVisitante'] = FieldValue.increment(1);
+        }
+      } else {
+        if (equipoPrincipal == 'local') {
+          incrementos['golesVisitante'] = FieldValue.increment(1);
+        } else {
+          incrementos['golesLocal'] = FieldValue.increment(1);
+        }
+      }
+
+      if (incrementos.isNotEmpty) {
+        await partidoRef.update(incrementos);
+      }
+    }
+
+    _resetFlujoAccion();
   }
 
   @override
@@ -609,9 +722,22 @@ class _PartidoEnJuegoScreenState extends State<PartidoEnJuegoScreen> {
           }
 
           final partidoActual = _partido!;
+          final mostrarPorteria = _accionSeleccionada != null &&
+              _requierePorteria(_accionSeleccionada!) &&
+              _zonaPorteriaSeleccionada == null;
+
+          final esperandoJugador = _accionSeleccionada != null &&
+              _zonaSeleccionada != null &&
+              (!_requierePorteria(_accionSeleccionada!) ||
+                  _zonaPorteriaSeleccionada != null);
+
           final tituloZona = _zonaSeleccionada == null
-              ? 'Selecciona la acción'
-              : 'Selecciona la acción de $_zonaSeleccionada';
+              ? 'Selecciona primero una zona de juego'
+              : _accionSeleccionada == null
+                  ? 'Selecciona la acción de $_zonaSeleccionada'
+                  : mostrarPorteria
+                      ? 'Selecciona zona de la portería'
+                      : 'Selecciona dorsal para $_accionSeleccionada';
 
           return SingleChildScrollView(
             padding: const EdgeInsets.all(16),
@@ -643,17 +769,13 @@ class _PartidoEnJuegoScreenState extends State<PartidoEnJuegoScreen> {
                 ),
                 const SizedBox(height: 16),
                 Text(
-                  _mostrandoPorteria
-                      ? 'Selecciona zona de la portería'
-                      : _mostrandoAcciones
-                          ? tituloZona
-                          : 'Zona de lanzamiento',
+                  tituloZona,
                   style: Theme.of(context).textTheme.titleMedium,
                 ),
                 const SizedBox(height: 8),
                 AnimatedSwitcher(
                   duration: const Duration(milliseconds: 250),
-                  child: _mostrandoPorteria
+                  child: mostrarPorteria
                       ? Column(
                           key: const ValueKey('porteria'),
                           children: [
@@ -661,7 +783,14 @@ class _PartidoEnJuegoScreenState extends State<PartidoEnJuegoScreen> {
                               height: 260,
                               child: PorteriaGridSelector(
                                 cuadranteSeleccionado: _zonaPorteriaSeleccionada,
-                                onCuadranteSelected: _onSeleccionPorteria,
+                                onCuadranteSelected: (codigo) {
+                                  _onSeleccionPorteria(codigo);
+                                  if (esperandoJugador &&
+                                      _equipoSeleccionado != null &&
+                                      _dorsalSeleccionado != null) {
+                                    _confirmarAccionConJugador();
+                                  }
+                                },
                               ),
                             ),
                             const SizedBox(height: 8),
@@ -669,47 +798,59 @@ class _PartidoEnJuegoScreenState extends State<PartidoEnJuegoScreen> {
                               'Toca un cuadrante de la portería',
                               textAlign: TextAlign.center,
                             ),
+                            Align(
+                              alignment: Alignment.centerRight,
+                              child: IconButton(
+                                onPressed: _resetFlujoAccion,
+                                icon: const Icon(Icons.close),
+                              ),
+                            )
                           ],
                         )
-                      : _mostrandoAcciones
-                          ? _AccionesPanel(
+                      : Column(
+                          key: const ValueKey('zonas'),
+                          children: [
+                            SizedBox(
+                              height: 260,
+                              child: ZonaLanzamientoSelector(
+                                zonaSeleccionada: _zonaSeleccionada,
+                                onZonaSelected: (zona) {
+                                  setState(() {
+                                    _zonaSeleccionada = zona;
+                                    _accionSeleccionada = null;
+                                    _zonaPorteriaSeleccionada = null;
+                                    _equipoSeleccionado = null;
+                                    _dorsalSeleccionado = null;
+                                  });
+                                },
+                              ),
+                            ),
+                            const SizedBox(height: 8),
+                            Text(
+                              _zonaSeleccionada == null
+                                  ? 'Toca una zona para seleccionarla'
+                                  : 'Zona seleccionada: $_zonaSeleccionada',
+                              textAlign: TextAlign.center,
+                            ),
+                            const SizedBox(height: 12),
+                            _AccionesPanel(
                               key: const ValueKey('acciones'),
                               zonaSeleccionada: _zonaSeleccionada,
                               onAccionSeleccionada: (contexto, accion) {
                                 _onAccionSeleccionada(contexto, accion);
                               },
-                            )
-                          : Column(
-                              key: const ValueKey('zonas'),
-                              children: [
-                                SizedBox(
-                                  height: 260,
-                                  child: ZonaLanzamientoSelector(
-                                    zonaSeleccionada: _zonaSeleccionada,
-                                    onZonaSelected: (zona) {
-                                      if (_dorsalSeleccionado == null ||
-                                          _equipoSeleccionado == null) {
-                                        _mostrarSnackBar(
-                                          'Selecciona primero un jugador y después la zona',
-                                        );
-                                        return;
-                                      }
-                                      setState(() {
-                                        _zonaSeleccionada = zona;
-                                        _mostrandoAcciones = true;
-                                      });
-                                    },
-                                  ),
-                                ),
-                                const SizedBox(height: 8),
-                                Text(
-                                  _zonaSeleccionada == null
-                                      ? 'Toca una zona para seleccionarla'
-                                      : 'Zona seleccionada: $_zonaSeleccionada',
+                              onCancelar: _resetFlujoAccion,
+                            ),
+                            if (_accionSeleccionada != null && !mostrarPorteria)
+                              Padding(
+                                padding: const EdgeInsets.only(top: 8.0),
+                                child: Text(
+                                  'Selecciona el dorsal que realiza la acción',
                                   textAlign: TextAlign.center,
                                 ),
-                              ],
-                            ),
+                              ),
+                          ],
+                        ),
                 ),
                 const SizedBox(height: 16),
                 _JugadoresActivosSection(
@@ -751,7 +892,7 @@ class _PartidoEnJuegoScreenState extends State<PartidoEnJuegoScreen> {
                     );
 
                     if (cambioRealizado == true) {
-                      _resetSeleccion();
+                      _resetFlujoAccion();
                     }
                   },
                   icon: const Icon(Icons.flag),
@@ -1087,14 +1228,26 @@ class _JugadoresActivosSection extends StatelessWidget {
           runSpacing: 8,
           children: dorsales.map((dorsal) {
             final isSelected = seleccionadoEquipo == equipoClave && seleccionadoDorsal == dorsal;
+            final isDisabled = seleccionadoEquipo == equipoClave &&
+                seleccionadoDorsal != null &&
+                seleccionadoDorsal != dorsal;
+            final esPortero = dorsales.indexOf(dorsal) == 0;
+            final baseColor = esPortero
+                ? (isSelected
+                    ? Colors.lightBlue.shade400
+                    : Colors.lightBlue.shade200)
+                : (isSelected ? Colors.amber.shade300 : Colors.amber.shade100);
+
+            final color = isDisabled ? Colors.grey.shade300 : baseColor;
+
             return GestureDetector(
-              onTap: () => onTap(equipoClave, dorsal),
+              onTap: isDisabled ? null : () => onTap(equipoClave, dorsal),
               child: AnimatedContainer(
                 duration: const Duration(milliseconds: 200),
                 width: 56,
                 height: 56,
                 decoration: BoxDecoration(
-                  color: isSelected ? Colors.amber.shade300 : Colors.amber.shade100,
+                  color: color,
                   shape: BoxShape.circle,
                   boxShadow: isSelected
                       ? [const BoxShadow(color: Colors.black26, blurRadius: 4, offset: Offset(0, 2))]
@@ -1106,7 +1259,9 @@ class _JugadoresActivosSection extends StatelessWidget {
                   style: TextStyle(
                     fontWeight: FontWeight.bold,
                     fontSize: 16,
-                    color: isSelected ? Colors.black : Colors.black87,
+                    color: isDisabled
+                        ? Colors.black45
+                        : (isSelected ? Colors.black : Colors.black87),
                   ),
                 ),
               ),
@@ -1123,10 +1278,12 @@ class _AccionesPanel extends StatelessWidget {
     super.key,
     required this.onAccionSeleccionada,
     required this.zonaSeleccionada,
+    required this.onCancelar,
   });
 
   final void Function(String contexto, String accion) onAccionSeleccionada;
   final String? zonaSeleccionada;
+  final VoidCallback onCancelar;
 
   @override
   Widget build(BuildContext context) {
@@ -1215,6 +1372,15 @@ class _AccionesPanel extends StatelessWidget {
                   ),
                 ),
               ],
+            ),
+            const SizedBox(height: 12),
+            Align(
+              alignment: Alignment.centerRight,
+              child: IconButton(
+                tooltip: 'Cancelar acción',
+                onPressed: onCancelar,
+                icon: const Icon(Icons.close),
+              ),
             ),
           ],
         ),
