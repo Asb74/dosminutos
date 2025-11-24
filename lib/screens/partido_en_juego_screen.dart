@@ -521,12 +521,26 @@ class _PartidoEnJuegoScreenState extends State<PartidoEnJuegoScreen> {
     if (!_esperandoJugadorSecundario) {
       _seleccionarJugadorPrincipal(equipo, dorsal);
     } else {
-      setState(() {
-        _equipoSecundario = equipo;
-        _dorsalSecundario = dorsal;
-      });
-      await _registrarAccion();
+      await _onDorsalSecundarioSeleccionado(equipo, dorsal);
     }
+  }
+
+  Future<void> _onDorsalSecundarioSeleccionado(String equipo, int dorsal) async {
+    setState(() {
+      _equipoSecundario = equipo;
+      _dorsalSecundario = dorsal;
+    });
+
+    print('--- REGISTRANDO ACCIÓN ---');
+    print('equipoPrincipal: $_equipoPrincipal');
+    print('dorsalPrincipal: $_dorsalPrincipal');
+    print('equipoSecundario: $_equipoSecundario');
+    print('dorsalSecundario: $_dorsalSecundario');
+    print('zonaCampo: $_zonaCampo');
+    print('zonaPorteria: $_zonaPorteria');
+    print('accion: $_accionSeleccionada');
+
+    await _registrarAccion();
   }
 
   void _mostrarSnackBar(String mensaje) {
@@ -627,7 +641,6 @@ class _PartidoEnJuegoScreenState extends State<PartidoEnJuegoScreen> {
 
   Future<void> _registrarAccion() async {
     try {
-      // Guarda la acción en ActaPartido y actualiza marcador si corresponde
       if (_equipoPrincipal == null ||
           _dorsalPrincipal == null ||
           _accionSeleccionada == null ||
@@ -654,10 +667,7 @@ class _PartidoEnJuegoScreenState extends State<PartidoEnJuegoScreen> {
         'dorsalSecundario': _dorsalSecundario,
         'zonaCampo': _zonaCampo,
         'zonaPorteria': _zonaPorteria,
-        'zonaJuego': _zonaCampo,
         'accion': _accionSeleccionada,
-        'minuto': _elapsed.inMinutes,
-        'segundo': _elapsed.inSeconds % 60,
       };
 
       await partidoRef.collection('ActaPartido').add(datos);
@@ -687,8 +697,10 @@ class _PartidoEnJuegoScreenState extends State<PartidoEnJuegoScreen> {
           await partidoRef.update(incrementos);
         }
       }
-    } finally {
+
       _resetFlujoAccion();
+    } catch (e) {
+      _mostrarSnackBar('Error al registrar la acción: $e');
     }
   }
 
@@ -821,8 +833,8 @@ class _PartidoEnJuegoScreenState extends State<PartidoEnJuegoScreen> {
                               accionSeleccionada: _accionSeleccionada,
                               nombreEquipoLocal: partidoActual.equipoLocalNombre,
                               nombreEquipoVisitante: partidoActual.equipoVisitanteNombre,
-                              onJugadorSeleccionado: (equipo, dorsal) async {
-                                await _seleccionarJugadorSecundario(equipo, dorsal);
+                              onJugadorSeleccionado: (equipo, dorsal) {
+                                _onDorsalSecundarioSeleccionado(equipo, dorsal);
                               },
                             )
                           : mostrarAcciones
@@ -1345,8 +1357,7 @@ class _JugadoresActivosSection extends StatelessWidget {
             final isEquipoPrincipal = seleccionadoEquipo == equipoClave;
             final esEquipoContrario = seleccionadoEquipo != null && seleccionadoEquipo != equipoClave;
             final esDorsalPrincipal = isEquipoPrincipal && seleccionadoDorsal == dorsal;
-            final esPortero =
-                ((jugador['posicion'] as String?)?.toLowerCase() ?? '').contains('portero');
+            final esPortero = jugadores.indexOf(jugador) == 0;
 
             final isDisabled = esperandoSecundario
                 ? (esEquipoContrario ? false : !esDorsalPrincipal)
@@ -1356,7 +1367,9 @@ class _JugadoresActivosSection extends StatelessWidget {
                 ? (isSelected
                     ? Colors.lightBlue.shade400
                     : Colors.lightBlue.shade200)
-                : (isSelected ? Colors.amber.shade300 : Colors.amber.shade100);
+                : (isSelected
+                    ? Colors.amber.shade300
+                    : Colors.amber.shade100);
 
             final color = isDisabled
                 ? (esPortero ? baseColor : Colors.grey.shade300)
