@@ -452,6 +452,19 @@ class _PartidoEnJuegoScreenState extends State<PartidoEnJuegoScreen> {
     return accion == 'Gol' || accion == 'Gol Contra' || accion == 'Parada';
   }
 
+  void _onJugadorSecundarioElegido(String equipo, int dorsal) {
+    setState(() {
+      if (_accionSeleccionada == 'Pasivo') {
+        _equipoSecundario = _equipoPrincipal;
+        _dorsalSecundario = 'Equipo';
+      } else {
+        _equipoSecundario = equipo;
+        _dorsalSecundario = dorsal;
+      }
+    });
+    _registrarAccion();
+  }
+
   void _seleccionarJugadorPrincipal(String equipo, int dorsal) {
     // Selecciona o deselecciona el jugador principal y prepara el flujo de selección
     final mismaSeleccion = _equipoPrincipal == equipo && _dorsalPrincipal == dorsal;
@@ -506,34 +519,23 @@ class _PartidoEnJuegoScreenState extends State<PartidoEnJuegoScreen> {
       if (_requierePorteria(accion)) {
         _mostrandoPorteria = true;
         _mostrandoAcciones = false;
+        _mostrandoZonas = false;
         _esperandoJugadorSecundario = false;
       } else {
         _mostrandoAcciones = false;
         _mostrandoPorteria = false;
+        _mostrandoZonas = false;
         _esperandoJugadorSecundario = true;
-        // volvemos a mostrar la pista
-        _mostrandoZonas = true;
       }
     });
   }
 
   void _seleccionarJugadorSecundario(String equipo, int dorsal) {
-    if (!_esperandoJugadorSecundario) {
-      _seleccionarJugadorPrincipal(equipo, dorsal);
+    if (_esperandoJugadorSecundario) {
       return;
     }
 
-    setState(() {
-      if (_accionSeleccionada == 'Pasivo') {
-        _equipoSecundario = _equipoPrincipal;
-        _dorsalSecundario = 'Equipo';
-      } else {
-        _equipoSecundario = equipo;
-        _dorsalSecundario = dorsal;
-      }
-    });
-
-    _registrarAccion();
+    _seleccionarJugadorPrincipal(equipo, dorsal);
   }
 
   void _mostrarSnackBar(String mensaje) {
@@ -611,33 +613,6 @@ class _PartidoEnJuegoScreenState extends State<PartidoEnJuegoScreen> {
     setState(() {
       _zonaPorteria = codigo;
     });
-
-    final accion = _accionSeleccionada;
-    if (accion == 'Gol' || accion == 'Gol Contra' || accion == 'Parada') {
-      final porteroLocal = _getPorteroActualLocal();
-      final porteroVisitante = _getPorteroActualVisitante();
-
-      setState(() {
-        if (accion == 'Parada') {
-          // El portero es el jugador principal; asignamos también el portero rival como secundario.
-          final esLocalPrincipal = _equipoPrincipal == 'local';
-          _equipoSecundario = esLocalPrincipal ? 'visitante' : 'local';
-          _dorsalSecundario = esLocalPrincipal ? porteroVisitante : porteroLocal;
-        } else {
-          final esLocalPrincipal = _equipoPrincipal == 'local';
-          _equipoSecundario = esLocalPrincipal ? 'visitante' : 'local';
-          _dorsalSecundario = esLocalPrincipal ? porteroVisitante : porteroLocal;
-        }
-
-        _mostrandoPorteria = false;
-        _mostrandoZonas = true;
-        _mostrandoAcciones = false;
-        _esperandoJugadorSecundario = false;
-      });
-
-      _registrarAccion();
-      return;
-    }
 
     setState(() {
       _mostrandoPorteria = false;
@@ -836,27 +811,37 @@ class _PartidoEnJuegoScreenState extends State<PartidoEnJuegoScreen> {
                               },
                               onCancelar: _resetFlujoAccion,
                             )
-                          : mostrarZonas
-                              ? Column(
-                                  key: const ValueKey('zonas'),
-                                  children: [
-                                    SizedBox(
-                                      height: 260,
-                                      child: ZonaLanzamientoSelector(
-                                        zonaSeleccionada: _zonaCampo,
-                                        onZonaSelected: _seleccionarZonaCampo,
-                                      ),
-                                    ),
-                                    const SizedBox(height: 8),
-                                    Text(
-                                      _zonaCampo == null
-                                          ? 'Toca una zona para seleccionarla'
-                                          : 'Zona seleccionada: $_zonaCampo',
-                                      textAlign: TextAlign.center,
-                                    ),
-                                  ],
+                          : _esperandoJugadorSecundario
+                              ? _SeleccionarJugadorSecundarioPanel(
+                                  key: const ValueKey('secundario'),
+                                  jugadoresLocal: _jugadoresLocal,
+                                  jugadoresVisitante: _jugadoresVisitante,
+                                  equipoPrincipal: _equipoPrincipal,
+                                  dorsalPrincipal: _dorsalPrincipal,
+                                  accionSeleccionada: _accionSeleccionada,
+                                  onJugadorSeleccionado: _onJugadorSecundarioElegido,
                                 )
-                              : const SizedBox.shrink(),
+                              : mostrarZonas
+                                  ? Column(
+                                      key: const ValueKey('zonas'),
+                                      children: [
+                                        SizedBox(
+                                          height: 260,
+                                          child: ZonaLanzamientoSelector(
+                                            zonaSeleccionada: _zonaCampo,
+                                            onZonaSelected: _seleccionarZonaCampo,
+                                          ),
+                                        ),
+                                        const SizedBox(height: 8),
+                                        Text(
+                                          _zonaCampo == null
+                                              ? 'Toca una zona para seleccionarla'
+                                              : 'Zona seleccionada: $_zonaCampo',
+                                          textAlign: TextAlign.center,
+                                        ),
+                                      ],
+                                    )
+                                  : const SizedBox.shrink(),
                 ),
                 const SizedBox(height: 16),
                 _JugadoresActivosSection(
@@ -1204,6 +1189,101 @@ class _ZonaGridPainter extends CustomPainter {
   }
 }
 
+class _SeleccionarJugadorSecundarioPanel extends StatelessWidget {
+  const _SeleccionarJugadorSecundarioPanel({
+    required this.jugadoresLocal,
+    required this.jugadoresVisitante,
+    required this.equipoPrincipal,
+    required this.dorsalPrincipal,
+    this.accionSeleccionada,
+    required this.onJugadorSeleccionado,
+    Key? key,
+  }) : super(key: key);
+
+  final List<Map<String, dynamic>> jugadoresLocal;
+  final List<Map<String, dynamic>> jugadoresVisitante;
+  final String? equipoPrincipal;
+  final int? dorsalPrincipal;
+  final String? accionSeleccionada;
+  final void Function(String equipo, int dorsal) onJugadorSeleccionado;
+
+  @override
+  Widget build(BuildContext context) {
+    Widget buildEquipo(String titulo, List<Map<String, dynamic>> jugadores, String equipoClave) {
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            titulo,
+            style: Theme.of(context).textTheme.titleMedium,
+          ),
+          const SizedBox(height: 8),
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: jugadores.map((jugador) {
+              final dorsal = (jugador['dorsal'] as num?)?.toInt();
+              if (dorsal == null) return const SizedBox.shrink();
+
+              final isDisabled = equipoClave == equipoPrincipal;
+              final esPortero = jugadores.indexOf(jugador) == 0;
+              final baseColor = esPortero
+                  ? Colors.lightBlue.shade200
+                  : Colors.amber.shade100;
+
+              final color = isDisabled ? Colors.grey.shade300 : baseColor;
+
+              return GestureDetector(
+                onTap: isDisabled ? null : () => onJugadorSeleccionado(equipoClave, dorsal),
+                child: AnimatedContainer(
+                  duration: const Duration(milliseconds: 200),
+                  width: 56,
+                  height: 56,
+                  decoration: BoxDecoration(
+                    color: color,
+                    shape: BoxShape.circle,
+                  ),
+                  alignment: Alignment.center,
+                  child: Text(
+                    dorsal.toString(),
+                    style: TextStyle(
+                      fontWeight: FontWeight.bold,
+                      fontSize: 16,
+                      color: isDisabled ? Colors.black45 : Colors.black87,
+                    ),
+                  ),
+                ),
+              );
+            }).toList(),
+          ),
+        ],
+      );
+    }
+
+    final textoAccion = accionSeleccionada ?? '';
+
+    return Card(
+      margin: EdgeInsets.zero,
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Text(
+              'Selecciona dorsal secundario para $textoAccion',
+              style: Theme.of(context).textTheme.titleMedium,
+            ),
+            const SizedBox(height: 16),
+            buildEquipo('LOCAL', jugadoresLocal, 'local'),
+            const SizedBox(height: 16),
+            buildEquipo('VISITANTE', jugadoresVisitante, 'visitante'),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
 class _JugadoresActivosSection extends StatelessWidget {
   const _JugadoresActivosSection({
     required this.titulo,
@@ -1241,10 +1321,11 @@ class _JugadoresActivosSection extends StatelessWidget {
             if (dorsal == null) return const SizedBox.shrink();
 
             final isSelected = seleccionadoEquipo == equipoClave && seleccionadoDorsal == dorsal;
-            final isDisabled = !esperandoSecundario &&
-                seleccionadoEquipo == equipoClave &&
-                seleccionadoDorsal != null &&
-                seleccionadoDorsal != dorsal;
+            final isEquipoPrincipal = seleccionadoEquipo == equipoClave;
+
+            final isDisabled = esperandoSecundario
+                ? true
+                : (isEquipoPrincipal && seleccionadoDorsal != null && seleccionadoDorsal != dorsal);
             final esPortero = jugadores.indexOf(jugador) == 0;
             final baseColor = esPortero
                 ? (isSelected
