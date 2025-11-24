@@ -542,16 +542,42 @@ class _PartidoEnJuegoScreenState extends State<PartidoEnJuegoScreen> {
     );
   }
 
-  List<Map<String, dynamic>> _parseJugadoresEnJuego(dynamic data) {
-    final lista = (data as List<dynamic>? ?? []);
-    return lista
-        .map((e) => e as Map<String, dynamic>)
-        .where((m) {
-          final enJuego = m['enJuego'];
-          // solo excluimos cuando es false explícito
-          return enJuego != false;
-        })
+  /// Devuelve la lista de jugadores EN JUEGO a partir de los convocados
+  /// usando el campo `enJuego == true`. Sirve tanto para local como visitante.
+  List<Map<String, dynamic>> _jugadoresEnJuegoDesdeConvocados(
+    Map<String, dynamic> data, {
+    required bool esLocal,
+  }) {
+    final keyConvocados = esLocal ? 'convocadosLocal' : 'convocadosVisitante';
+    final raw = data[keyConvocados];
+
+    if (raw is! List) return [];
+
+    // Nos quedamos sólo con Map y con enJuego == true
+    final lista = raw
+        .whereType<Map<String, dynamic>>()
+        .where((j) => (j['enJuego'] as bool?) ?? false)
         .toList();
+
+    // Orden: primero portero (si hay posición 'Portero'),
+    // luego resto por dorsal ascendente
+    lista.sort((a, b) {
+      final posA = (a['posicion'] as String?)?.toLowerCase() ?? '';
+      final posB = (b['posicion'] as String?)?.toLowerCase() ?? '';
+      final esPorteroA = posA.contains('portero');
+      final esPorteroB = posB.contains('portero');
+      if (esPorteroA && !esPorteroB) return -1;
+      if (!esPorteroA && esPorteroB) return 1;
+      final dA = (a['dorsal'] as num?)?.toInt() ?? 0;
+      final dB = (b['dorsal'] as num?)?.toInt() ?? 0;
+      return dA.compareTo(dB);
+    });
+
+    // Nos quedamos como máximo con 7 (portero + 6 de campo)
+    if (lista.length > 7) {
+      return lista.sublist(0, 7);
+    }
+    return lista;
   }
 
   int? _getPorteroActualLocal() =>
@@ -560,10 +586,11 @@ class _PartidoEnJuegoScreenState extends State<PartidoEnJuegoScreen> {
       _jugadoresVisitante.isNotEmpty ? (_jugadoresVisitante.first['dorsal'] as num?)?.toInt() : null;
 
   Future<void> _syncPartido(Partido partido, Map<String, dynamic> data) async {
+    // Calculamos SIEMPRE los jugadores en juego desde convocados
     final jugadoresLocalEnJuego =
-        _parseJugadoresEnJuego(data['jugadoresEnJuegoLocal']);
+        _jugadoresEnJuegoDesdeConvocados(data, esLocal: true);
     final jugadoresVisitanteEnJuego =
-        _parseJugadoresEnJuego(data['jugadoresEnJuegoVisitante']);
+        _jugadoresEnJuegoDesdeConvocados(data, esLocal: false);
 
     setState(() {
       _partido = partido;
