@@ -20,6 +20,21 @@ class CambiosScreen extends StatefulWidget {
 }
 
 class _CambiosScreenState extends State<CambiosScreen> {
+  List<int> _parseJugadoresEnJuego(dynamic raw) {
+    final lista = raw is List ? raw : <dynamic>[];
+
+    return lista
+        .map<int?>((item) {
+          if (item is num) return item.toInt();
+          if (item is Map<String, dynamic>) {
+            return (item['dorsal'] as num?)?.toInt();
+          }
+          return null;
+        })
+        .whereType<int>()
+        .toList();
+  }
+
   @override
   Widget build(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
@@ -57,17 +72,10 @@ class _CambiosScreenState extends State<CambiosScreen> {
                     .map((e) => Map<String, dynamic>.from(e))
                     .toList();
 
-            final jugadoresEnJuegoLocal = (data['jugadoresEnJuegoLocal'] as List?)
-                    ?.map((e) => (e as num?)?.toInt())
-                    .whereType<int>()
-                    .toList() ??
-                [];
+            final jugadoresEnJuegoLocal =
+                _parseJugadoresEnJuego(data['jugadoresEnJuegoLocal']);
             final jugadoresEnJuegoVisitante =
-                (data['jugadoresEnJuegoVisitante'] as List?)
-                        ?.map((e) => (e as num?)?.toInt())
-                        .whereType<int>()
-                        .toList() ??
-                    [];
+                _parseJugadoresEnJuego(data['jugadoresEnJuegoVisitante']);
 
             final esLocal = widget.equipo == 'local';
             final List<Map<String, dynamic>> convocados =

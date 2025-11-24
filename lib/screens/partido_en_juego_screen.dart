@@ -541,7 +541,7 @@ class _PartidoEnJuegoScreenState extends State<PartidoEnJuegoScreen> {
   }
 
   List<Map<String, dynamic>> _parseJugadoresEnJuego(dynamic data) {
-    final rawList = (data as List<dynamic>? ?? []);
+    final rawList = data is List ? data : <dynamic>[];
 
     return rawList
         .map<Map<String, dynamic>>((item) {
