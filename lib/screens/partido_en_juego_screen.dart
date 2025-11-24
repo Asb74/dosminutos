@@ -833,8 +833,8 @@ class _PartidoEnJuegoScreenState extends State<PartidoEnJuegoScreen> {
                               accionSeleccionada: _accionSeleccionada,
                               nombreEquipoLocal: partidoActual.equipoLocalNombre,
                               nombreEquipoVisitante: partidoActual.equipoVisitanteNombre,
-                              onJugadorSeleccionado: (equipo, dorsal) {
-                                _onDorsalSecundarioSeleccionado(equipo, dorsal);
+                              onJugadorSeleccionado: (equipo, dorsal) async {
+                                await _onDorsalSecundarioSeleccionado(equipo, dorsal);
                               },
                             )
                           : mostrarAcciones
