@@ -155,6 +155,55 @@ class _NuevoPartidoScreenState extends State<NuevoPartidoScreen> {
     return conv;
   }
 
+  /// Genera la alineación inicial de 7 jugadores en juego para un equipo.
+  ///
+  /// - Elige como portero el primer jugador con `posicion == 'Portero'`
+  ///   tras ordenar por dorsal ascendente. Si no hay portero, usa el dorsal
+  ///   más bajo.
+  /// - El resto de jugadores de campo son los 6 primeros (por dorsal) excluyendo
+  ///   al portero seleccionado.
+  /// - Si hay menos de 7 convocados, devuelve la lista disponible respetando el
+  ///   orden anterior.
+  List<Map<String, dynamic>> buildJugadoresEnJuegoInicial(
+    List<dynamic> convocados,
+  ) {
+    final jugadoresOrdenados = convocados
+        .whereType<Map<String, dynamic>>()
+        .map((jugador) {
+          final dorsal = (jugador['dorsal'] as num?)?.toInt() ?? 0;
+          final nombre = jugador['nombre'] as String? ?? '';
+          final posicion = jugador['posicion'] as String? ?? '';
+
+          // Clonamos el mapa para no modificar referencias externas.
+          return {
+            ...jugador,
+            'dorsal': dorsal,
+            'nombre': nombre,
+            'posicion': posicion,
+          };
+        })
+        .toList()
+      ..sort(
+        (a, b) => ((a['dorsal'] as num?)?.toInt() ?? 0)
+            .compareTo((b['dorsal'] as num?)?.toInt() ?? 0),
+      );
+
+    if (jugadoresOrdenados.isEmpty) return [];
+
+    final portero = jugadoresOrdenados.firstWhere(
+      (jugador) =>
+          (jugador['posicion'] as String?)?.toLowerCase() == 'portero',
+      orElse: () => jugadoresOrdenados.first,
+    );
+
+    final jugadoresCampo = jugadoresOrdenados
+        .where((jugador) => !identical(jugador, portero))
+        .take(6)
+        .toList();
+
+    return [portero, ...jugadoresCampo];
+  }
+
   Future<void> _autocompletarPabellonDesdeClub(Equipo? equipoLocal) async {
     if (equipoLocal?.clubId == null || equipoLocal!.clubId!.isEmpty) return;
     if (_pabellonController.text.trim().isNotEmpty) return;
@@ -270,9 +319,15 @@ class _NuevoPartidoScreenState extends State<NuevoPartidoScreen> {
         updatedAt: ahora,
       );
 
+      final partidoData = partido.toMap();
+      partidoData['jugadoresEnJuegoLocal'] =
+          buildJugadoresEnJuegoInicial(convLocal);
+      partidoData['jugadoresEnJuegoVisitante'] =
+          buildJugadoresEnJuegoInicial(convVis);
+
       final docRef = await FirebaseFirestore.instance
           .collection('Partidos')
-          .add(partido.toMap());
+          .add(partidoData);
 
       if (mounted) {
         await _mostrarDialogoExito(docRef.id);
