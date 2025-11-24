@@ -187,6 +187,16 @@ class _PartidoEnJuegoScreenState extends State<PartidoEnJuegoScreen> {
     super.dispose();
   }
 
+  int _maxSegundosPeriodo() {
+    if (_periodoActual == '1º Tiempo' || _periodoActual == '2º Tiempo') {
+      return 30 * 60;
+    }
+    if (_periodoActual == '1ª Prórroga' || _periodoActual == '2ª Prórroga') {
+      return 5 * 60;
+    }
+    return 30 * 60;
+  }
+
   void _startTimer() {
     if (_isPlaying) return;
 
@@ -195,6 +205,16 @@ class _PartidoEnJuegoScreenState extends State<PartidoEnJuegoScreen> {
         _elapsed += const Duration(seconds: 1);
         _ticksSincePersist++;
       });
+
+      final maxSegundos = _maxSegundosPeriodo();
+      if (_elapsed.inSeconds >= maxSegundos) {
+        setState(() {
+          _elapsed = Duration(seconds: maxSegundos);
+        });
+        _pauseTimer();
+        _mostrarSnackBar('Fin del periodo $_periodoActual');
+        return;
+      }
       if (_ticksSincePersist >= 15) {
         _persistTiempo();
         _ticksSincePersist = 0;
@@ -250,8 +270,12 @@ class _PartidoEnJuegoScreenState extends State<PartidoEnJuegoScreen> {
       return;
     }
 
+    final maxSegundos = _maxSegundosPeriodo();
+    final clamped =
+        parsed.inSeconds > maxSegundos ? Duration(seconds: maxSegundos) : parsed;
+
     setState(() {
-      _elapsed = parsed;
+      _elapsed = clamped;
     });
     _persistTiempo();
   }
@@ -397,6 +421,19 @@ class _PartidoEnJuegoScreenState extends State<PartidoEnJuegoScreen> {
     };
   }
 
+  void _resetSeleccion() {
+    setState(() {
+      _equipoSeleccionado = null;
+      _dorsalSeleccionado = null;
+      _zonaSeleccionada = null;
+      _zonaPorteriaSeleccionada = null;
+      _accionPendiente = null;
+      _contextoPendiente = null;
+      _mostrandoPorteria = false;
+      _mostrandoAcciones = false;
+    });
+  }
+
   void _onSeleccionPorteria(String codigo) {
     setState(() {
       _zonaPorteriaSeleccionada = codigo;
@@ -433,12 +470,7 @@ class _PartidoEnJuegoScreenState extends State<PartidoEnJuegoScreen> {
     // De momento solo haz un print, ya conectaremos con Firestore después.
     print('ACCION REGISTRADA: $datos');
 
-    setState(() {
-      // volvemos a mostrar la cuadrícula
-      _mostrandoAcciones = false;
-      _zonaSeleccionada = null;
-      _zonaPorteriaSeleccionada = null;
-    });
+    _resetSeleccion();
   }
 
   bool _requierePorteria(String accion) {
@@ -571,6 +603,9 @@ class _PartidoEnJuegoScreenState extends State<PartidoEnJuegoScreen> {
           }
 
           final partidoActual = _partido!;
+          final tituloZona = _zonaSeleccionada == null
+              ? 'Selecciona la acción'
+              : 'Selecciona la acción de $_zonaSeleccionada';
 
           return SingleChildScrollView(
             padding: const EdgeInsets.all(16),
@@ -605,7 +640,7 @@ class _PartidoEnJuegoScreenState extends State<PartidoEnJuegoScreen> {
                   _mostrandoPorteria
                       ? 'Selecciona zona de la portería'
                       : _mostrandoAcciones
-                          ? 'Selecciona la acción'
+                          ? tituloZona
                           : 'Zona de lanzamiento',
                   style: Theme.of(context).textTheme.titleMedium,
                 ),
@@ -633,6 +668,7 @@ class _PartidoEnJuegoScreenState extends State<PartidoEnJuegoScreen> {
                       : _mostrandoAcciones
                           ? _AccionesPanel(
                               key: const ValueKey('acciones'),
+                              zonaSeleccionada: _zonaSeleccionada,
                               onAccionSeleccionada: (contexto, accion) {
                                 _onAccionSeleccionada(contexto, accion);
                               },
@@ -821,12 +857,23 @@ class _MarcadorWidget extends StatelessWidget {
                   onTap: onStart,
                   onDoubleTap: onPause,
                   onLongPress: onEditTiempo,
-                  child: Text(
-                    tiempo,
-                    style: TextStyle(
-                      fontWeight: FontWeight.bold,
-                      fontSize: 18,
-                      color: isPlaying ? Colors.green : Colors.orange,
+                  child: Container(
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                    decoration: BoxDecoration(
+                      color: Colors.black,
+                      borderRadius: BorderRadius.circular(6),
+                    ),
+                    child: Text(
+                      tiempo,
+                      style: TextStyle(
+                        fontFamily: 'RobotoMono',
+                        fontSize: 18,
+                        fontWeight: FontWeight.bold,
+                        letterSpacing: 1.5,
+                        color:
+                            isPlaying ? Colors.greenAccent : Colors.orangeAccent,
+                      ),
                     ),
                   ),
                 ),
@@ -883,7 +930,7 @@ class _ZonaLanzamientoSelectorState extends State<ZonaLanzamientoSelector> {
     ['L9D', 'C9C', 'L9I'],
     ['L8D', 'C8C', 'L8I'],
     ['E6D', 'L6D', 'C6C', 'L6I', 'E6I'],
-    ['7M1', '7M2'],
+    ['7M'],
   ];
 
   @override
@@ -948,6 +995,15 @@ class _ZonaGridPainter extends CustomPainter {
       ..style = PaintingStyle.stroke
       ..strokeWidth = 1.2;
 
+    final highlight = Paint()
+      ..color = Colors.yellow.withOpacity(0.25)
+      ..style = PaintingStyle.fill;
+
+    final textPainter = TextPainter(
+      textAlign: TextAlign.center,
+      textDirection: TextDirection.ltr,
+    );
+
     final rowHeight = size.height / zonas.length;
 
     for (int i = 0; i < zonas.length; i++) {
@@ -959,14 +1015,26 @@ class _ZonaGridPainter extends CustomPainter {
       for (int j = 0; j < columns; j++) {
         final left = j * columnWidth;
         final rect = Rect.fromLTWH(left, top, columnWidth, rowHeight);
-        canvas.drawRect(rect, paint);
-
         if (zonas[i][j] == selected) {
-          final highlight = Paint()
-            ..color = Colors.yellow.withOpacity(0.25)
-            ..style = PaintingStyle.fill;
           canvas.drawRect(rect, highlight);
         }
+
+        canvas.drawRect(rect, paint);
+
+        textPainter.text = TextSpan(
+          text: zonas[i][j],
+          style: const TextStyle(
+            fontSize: 12,
+            fontWeight: FontWeight.w600,
+            color: Colors.black,
+          ),
+        );
+        textPainter.layout();
+        final offset = Offset(
+          rect.center.dx - textPainter.width / 2,
+          rect.center.dy - textPainter.height / 2,
+        );
+        textPainter.paint(canvas, offset);
       }
     }
   }
@@ -1044,13 +1112,18 @@ class _AccionesPanel extends StatelessWidget {
   const _AccionesPanel({
     super.key,
     required this.onAccionSeleccionada,
+    required this.zonaSeleccionada,
   });
 
   final void Function(String contexto, String accion) onAccionSeleccionada;
+  final String? zonaSeleccionada;
 
   @override
   Widget build(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
+    final tituloZona = zonaSeleccionada == null
+        ? 'Selecciona la acción'
+        : 'Selecciona la acción de $zonaSeleccionada';
 
     Widget buildBoton(String texto, String contexto) {
       return FilledButton.tonal(
@@ -1068,60 +1141,70 @@ class _AccionesPanel extends StatelessWidget {
       color: colorScheme.surface,
       child: Padding(
         padding: const EdgeInsets.all(16),
-        child: Row(
+        child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // Columna ATAQUE
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const Text(
-                    'Ataque',
-                    style: TextStyle(fontWeight: FontWeight.bold),
-                  ),
-                  const SizedBox(height: 12),
-                  Wrap(
-                    spacing: 8,
-                    runSpacing: 8,
-                    children: [
-                      buildBoton('Gol', 'ataque'),
-                      buildBoton('Gol Contra', 'ataque'),
-                      buildBoton('Fallo', 'ataque'),
-                      buildBoton('Parada', 'ataque'),
-                      buildBoton('Bloqueo', 'ataque'),
-                      buildBoton('Perdida', 'ataque'),
-                      buildBoton('Pasivo', 'ataque'),
-                      buildBoton('Línea', 'ataque'),
-                    ],
-                  ),
-                ],
-              ),
+            Text(
+              tituloZona,
+              style: const TextStyle(fontWeight: FontWeight.w700),
             ),
-            const SizedBox(width: 16),
-            // Columna DEFENSA
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const Text(
-                    'Defensa',
-                    style: TextStyle(fontWeight: FontWeight.bold),
-                  ),
-                  const SizedBox(height: 12),
-                  Wrap(
-                    spacing: 8,
-                    runSpacing: 8,
+            const SizedBox(height: 12),
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                // Columna ATAQUE
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      buildBoton('Golpe', 'defensa'),
-                      buildBoton('2 minutos', 'defensa'),
-                      buildBoton('Tarjeta Amarilla', 'defensa'),
-                      buildBoton('Tarjeta Roja', 'defensa'),
-                      buildBoton('Tarjeta Azul', 'defensa'),
+                      const Text(
+                        'Ataque',
+                        style: TextStyle(fontWeight: FontWeight.bold),
+                      ),
+                      const SizedBox(height: 12),
+                      Wrap(
+                        spacing: 8,
+                        runSpacing: 8,
+                        children: [
+                          buildBoton('Gol', 'ataque'),
+                          buildBoton('Gol Contra', 'ataque'),
+                          buildBoton('Fallo', 'ataque'),
+                          buildBoton('Parada', 'ataque'),
+                          buildBoton('Bloqueo', 'ataque'),
+                          buildBoton('Perdida', 'ataque'),
+                          buildBoton('Pasivo', 'ataque'),
+                          buildBoton('Línea', 'ataque'),
+                        ],
+                      ),
                     ],
                   ),
-                ],
-              ),
+                ),
+                const SizedBox(width: 16),
+                // Columna DEFENSA
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text(
+                        'Defensa',
+                        style: TextStyle(fontWeight: FontWeight.bold),
+                      ),
+                      const SizedBox(height: 12),
+                      Wrap(
+                        spacing: 8,
+                        runSpacing: 8,
+                        children: [
+                          buildBoton('Golpe', 'defensa'),
+                          buildBoton('2 minutos', 'defensa'),
+                          buildBoton('Tarjeta Amarilla', 'defensa'),
+                          buildBoton('Tarjeta Roja', 'defensa'),
+                          buildBoton('Tarjeta Azul', 'defensa'),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+              ],
             ),
           ],
         ),
