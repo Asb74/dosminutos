@@ -541,8 +541,25 @@ class _PartidoEnJuegoScreenState extends State<PartidoEnJuegoScreen> {
   }
 
   List<Map<String, dynamic>> _parseJugadoresEnJuego(dynamic data) {
-    // Se castea para evitar errores de tipo (List<dynamic> -> List<Map<String, dynamic>>)
-    return (data as List<dynamic>? ?? []).cast<Map<String, dynamic>>();
+    final rawList = (data as List<dynamic>? ?? []);
+
+    return rawList
+        .map<Map<String, dynamic>>((item) {
+          if (item is num) {
+            // Caso actual: Firestore devuelve [3, 11, 22, ...]
+            return {'dorsal': item.toInt()};
+          }
+
+          if (item is Map<String, dynamic>) {
+            // Caso futuro: Firestore devuelve [{dorsal: 3, esPortero: true}, ...]
+            return item;
+          }
+
+          // Ignorar lo que no tenga dorsal
+          return <String, dynamic>{};
+        })
+        .where((m) => m['dorsal'] != null)
+        .toList();
   }
 
   int? _getPorteroActualLocal() =>
