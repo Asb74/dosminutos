@@ -310,13 +310,19 @@ class _PartidoEnJuegoScreenState extends State<PartidoEnJuegoScreen> {
   }
 
   Future<void> _cambiarPeriodo() async {
+    _timer?.cancel();
+    _timer = null;
+
     final currentIndex = _periodos.indexOf(_periodoActual);
     final nextIndex = (currentIndex + 1) % _periodos.length;
     setState(() {
       _periodoActual = _periodos[nextIndex];
+      _isPlaying = false;
+      _elapsed = Duration.zero;
     });
     await FirebaseFirestore.instance.collection('Partidos').doc(widget.partidoId).update({
       'periodoActual': _periodoActual,
+      'segundoPartido': 0,
     });
   }
 
@@ -725,7 +731,7 @@ class _PartidoEnJuegoScreenState extends State<PartidoEnJuegoScreen> {
                 ),
                 const SizedBox(height: 16),
                 FilledButton.icon(
-                  onPressed: () {
+                  onPressed: () async {
                     if (_dorsalSeleccionado == null || _equipoSeleccionado == null) {
                       _mostrarSnackBar(
                         'Selecciona primero un jugador a sustituir',
@@ -733,7 +739,7 @@ class _PartidoEnJuegoScreenState extends State<PartidoEnJuegoScreen> {
                       return;
                     }
 
-                    Navigator.of(context).push(
+                    final cambioRealizado = await Navigator.of(context).push<bool>(
                       MaterialPageRoute(
                         builder: (_) => CambiosScreen(
                           partidoId: widget.partidoId,
@@ -743,6 +749,10 @@ class _PartidoEnJuegoScreenState extends State<PartidoEnJuegoScreen> {
                         ),
                       ),
                     );
+
+                    if (cambioRealizado == true) {
+                      _resetSeleccion();
+                    }
                   },
                   icon: const Icon(Icons.flag),
                   label: const Text('Cambios'),

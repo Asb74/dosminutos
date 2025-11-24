@@ -249,6 +249,6 @@ class _CambiosScreenState extends State<CambiosScreen> {
       'convocadosVisitante': nuevosConvocadosVisitante,
     });
 
-    if (mounted) Navigator.of(context).pop();
+    if (mounted) Navigator.of(context).pop(true);
   }
 }
