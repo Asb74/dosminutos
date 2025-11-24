@@ -57,6 +57,18 @@ class _CambiosScreenState extends State<CambiosScreen> {
                     .map((e) => Map<String, dynamic>.from(e))
                     .toList();
 
+            final jugadoresEnJuegoLocal = (data['jugadoresEnJuegoLocal'] as List?)
+                    ?.map((e) => (e as num?)?.toInt())
+                    .whereType<int>()
+                    .toList() ??
+                [];
+            final jugadoresEnJuegoVisitante =
+                (data['jugadoresEnJuegoVisitante'] as List?)
+                        ?.map((e) => (e as num?)?.toInt())
+                        .whereType<int>()
+                        .toList() ??
+                    [];
+
             final esLocal = widget.equipo == 'local';
             final List<Map<String, dynamic>> convocados =
                 esLocal ? convocadosLocal : convocadosVisitante;
@@ -141,6 +153,8 @@ class _CambiosScreenState extends State<CambiosScreen> {
                                         convocadosVisitante,
                                         jugadorActualIndex,
                                         esLocal,
+                                        jugadoresEnJuegoLocal,
+                                        jugadoresEnJuegoVisitante,
                                       ),
                                       borderRadius: BorderRadius.circular(12),
                                       child: Padding(
@@ -217,6 +231,8 @@ class _CambiosScreenState extends State<CambiosScreen> {
     List<Map<String, dynamic>> convocadosVisitante,
     int jugadorActualIndex,
     bool esLocal,
+    List<int> jugadoresEnJuegoLocal,
+    List<int> jugadoresEnJuegoVisitante,
   ) async {
     if (jugadorActualIndex < 0) {
       // Si el jugador actual no está en el array, no hacemos nada.
@@ -244,9 +260,36 @@ class _CambiosScreenState extends State<CambiosScreen> {
       seleccionados[idxEntrante]['enJuego'] = true;
     }
 
+    final jugadoresEnJuego =
+        esLocal ? List<int>.from(jugadoresEnJuegoLocal) : List<int>.from(jugadoresEnJuegoVisitante);
+
+    if (dorsalEntrante != null && jugadoresEnJuego.isNotEmpty) {
+      final idxActualEnJuego = jugadoresEnJuego.indexOf(widget.dorsal);
+
+      if (idxActualEnJuego >= 0) {
+        final posicionEntrante =
+            (jugadorEntrante['posicion'] as String? ?? '').toLowerCase();
+        final esPorteroEntrante = posicionEntrante == 'portero';
+
+        if (esPorteroEntrante) {
+          final temp = jugadoresEnJuego[0];
+          jugadoresEnJuego[0] = dorsalEntrante;
+          if (idxActualEnJuego < jugadoresEnJuego.length) {
+            jugadoresEnJuego[idxActualEnJuego] = temp;
+          }
+        } else if (idxActualEnJuego == 0) {
+          jugadoresEnJuego[0] = dorsalEntrante;
+        } else if (idxActualEnJuego < jugadoresEnJuego.length) {
+          jugadoresEnJuego[idxActualEnJuego] = dorsalEntrante;
+        }
+      }
+    }
+
     await FirebaseFirestore.instance.collection('Partidos').doc(widget.partidoId).update({
       'convocadosLocal': nuevosConvocadosLocal,
       'convocadosVisitante': nuevosConvocadosVisitante,
+      'jugadoresEnJuegoLocal': esLocal ? jugadoresEnJuego : jugadoresEnJuegoLocal,
+      'jugadoresEnJuegoVisitante': esLocal ? jugadoresEnJuegoVisitante : jugadoresEnJuego,
     });
 
     if (mounted) Navigator.of(context).pop(true);
