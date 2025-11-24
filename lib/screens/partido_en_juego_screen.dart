@@ -452,23 +452,6 @@ class _PartidoEnJuegoScreenState extends State<PartidoEnJuegoScreen> {
     return accion == 'Gol' || accion == 'Gol Contra' || accion == 'Parada';
   }
 
-  void _onJugadorSecundarioElegido(String equipo, int dorsal) {
-    final equipoSecundario = _accionSeleccionada == 'Pasivo'
-        ? _equipoPrincipal
-        : equipo;
-    final dorsalSecundario = _accionSeleccionada == 'Pasivo' ? 'Equipo' : dorsal;
-
-    setState(() {
-      _equipoSecundario = equipoSecundario;
-      _dorsalSecundario = dorsalSecundario;
-    });
-
-    _registrarAccion(
-      equipoSecundario: equipoSecundario,
-      dorsalSecundario: dorsalSecundario,
-    );
-  }
-
   void _seleccionarJugadorPrincipal(String equipo, int dorsal) {
     // Selecciona o deselecciona el jugador principal y prepara el flujo de selección
     final mismaSeleccion = _equipoPrincipal == equipo && _dorsalPrincipal == dorsal;
@@ -534,12 +517,16 @@ class _PartidoEnJuegoScreenState extends State<PartidoEnJuegoScreen> {
     });
   }
 
-  void _seleccionarJugadorSecundario(String equipo, int dorsal) {
-    if (_esperandoJugadorSecundario) {
-      return;
+  Future<void> _seleccionarJugadorSecundario(String equipo, int dorsal) async {
+    if (!_esperandoJugadorSecundario) {
+      _seleccionarJugadorPrincipal(equipo, dorsal);
+    } else {
+      setState(() {
+        _equipoSecundario = equipo;
+        _dorsalSecundario = dorsal;
+      });
+      await _registrarAccion();
     }
-
-    _seleccionarJugadorPrincipal(equipo, dorsal);
   }
 
   void _mostrarSnackBar(String mensaje) {
@@ -550,6 +537,36 @@ class _PartidoEnJuegoScreenState extends State<PartidoEnJuegoScreen> {
 
   /// Devuelve la lista de jugadores EN JUEGO a partir de los convocados
   /// usando el campo `enJuego == true`. Sirve tanto para local como visitante.
+  List<Map<String, dynamic>> _parseJugadoresEnJuego(dynamic data) {
+    final List<Map<String, dynamic>> lista = [];
+
+    if (data is List) {
+      for (final item in data) {
+        if (item is Map) {
+          lista.add(Map<String, dynamic>.from(item));
+        }
+      }
+    }
+
+    lista.sort((a, b) {
+      final posA = (a['posicion'] ?? '').toString().toLowerCase();
+      final posB = (b['posicion'] ?? '').toString().toLowerCase();
+
+      final esPorteroA = posA.contains('portero');
+      final esPorteroB = posB.contains('portero');
+
+      if (esPorteroA && !esPorteroB) return -1;
+      if (!esPorteroA && esPorteroB) return 1;
+
+      final dorsalA = (a['dorsal'] as num?)?.toInt() ?? 0;
+      final dorsalB = (b['dorsal'] as num?)?.toInt() ?? 0;
+
+      return dorsalA.compareTo(dorsalB);
+    });
+
+    return lista;
+  }
+
   List<Map<String, dynamic>> _jugadoresEnJuegoDesdeConvocados(
     Map<String, dynamic> data, {
     required bool esLocal,
@@ -557,27 +574,9 @@ class _PartidoEnJuegoScreenState extends State<PartidoEnJuegoScreen> {
     final keyConvocados = esLocal ? 'convocadosLocal' : 'convocadosVisitante';
     final raw = data[keyConvocados];
 
-    if (raw is! List) return [];
-
-    // Nos quedamos sólo con Map y con enJuego == true
-    final lista = raw
-        .whereType<Map<String, dynamic>>()
+    final lista = _parseJugadoresEnJuego(raw)
         .where((j) => (j['enJuego'] as bool?) ?? false)
         .toList();
-
-    // Orden: primero portero (si hay posición 'Portero'),
-    // luego resto por dorsal ascendente
-    lista.sort((a, b) {
-      final posA = (a['posicion'] as String?)?.toLowerCase() ?? '';
-      final posB = (b['posicion'] as String?)?.toLowerCase() ?? '';
-      final esPorteroA = posA.contains('portero');
-      final esPorteroB = posB.contains('portero');
-      if (esPorteroA && !esPorteroB) return -1;
-      if (!esPorteroA && esPorteroB) return 1;
-      final dA = (a['dorsal'] as num?)?.toInt() ?? 0;
-      final dB = (b['dorsal'] as num?)?.toInt() ?? 0;
-      return dA.compareTo(dB);
-    });
 
     // Nos quedamos como máximo con 7 (portero + 6 de campo)
     if (lista.length > 7) {
@@ -626,71 +625,71 @@ class _PartidoEnJuegoScreenState extends State<PartidoEnJuegoScreen> {
     });
   }
 
-  Future<void> _registrarAccion({
-    required String? equipoSecundario,
-    required dynamic dorsalSecundario,
-  }) async {
-    // Guarda la acción en ActaPartido y actualiza marcador si corresponde
-    if (_equipoPrincipal == null ||
-        _dorsalPrincipal == null ||
-        _accionSeleccionada == null ||
-        _zonaCampo == null) {
-      _mostrarSnackBar('Faltan datos para registrar la acción.');
-      return;
-    }
-
-    if (_requierePorteria(_accionSeleccionada!) && _zonaPorteria == null) {
-      _mostrarSnackBar('Selecciona una zona de la portería.');
-      return;
-    }
-
-    final partidoRef = FirebaseFirestore.instance.collection('Partidos').doc(widget.partidoId);
-    final datos = {
-      'partidoId': widget.partidoId,
-      'timestamp': FieldValue.serverTimestamp(),
-      'periodo': _periodoActual,
-      'tiempoJuego': _formatDuration(_elapsed),
-      'equipoPrincipal': _equipoPrincipal,
-      'dorsalPrincipal': _dorsalPrincipal,
-      'equipoSecundario': equipoSecundario,
-      'dorsalSecundario': dorsalSecundario,
-      'zonaCampo': _zonaCampo,
-      'zonaPorteria': _zonaPorteria,
-      'zonaJuego': _zonaCampo,
-      'accion': _accionSeleccionada,
-      'minuto': _elapsed.inMinutes,
-      'segundo': _elapsed.inSeconds % 60,
-    };
-
-    await partidoRef.collection('ActaPartido').add(datos);
-
-    if (_accionSeleccionada == 'Gol' || _accionSeleccionada == 'Gol Contra') {
-      final incrementos = <String, dynamic>{};
-      setState(() {
-        if (_accionSeleccionada == 'Gol') {
-          if (_equipoPrincipal == 'local') {
-            incrementos['golesLocal'] = FieldValue.increment(1);
-            _golesLocal += 1;
-          } else {
-            incrementos['golesVisitante'] = FieldValue.increment(1);
-            _golesVisitante += 1;
-          }
-        } else {
-          if (_equipoPrincipal == 'local') {
-            incrementos['golesVisitante'] = FieldValue.increment(1);
-            _golesVisitante += 1;
-          } else {
-            incrementos['golesLocal'] = FieldValue.increment(1);
-            _golesLocal += 1;
-          }
-        }
-      });
-      if (incrementos.isNotEmpty) {
-        await partidoRef.update(incrementos);
+  Future<void> _registrarAccion() async {
+    try {
+      // Guarda la acción en ActaPartido y actualiza marcador si corresponde
+      if (_equipoPrincipal == null ||
+          _dorsalPrincipal == null ||
+          _accionSeleccionada == null ||
+          _zonaCampo == null) {
+        _mostrarSnackBar('Faltan datos para registrar la acción.');
+        return;
       }
-    }
 
-    _resetFlujoAccion();
+      if (_requierePorteria(_accionSeleccionada!) && _zonaPorteria == null) {
+        _mostrarSnackBar('Selecciona una zona de la portería.');
+        return;
+      }
+
+      final partidoRef =
+          FirebaseFirestore.instance.collection('Partidos').doc(widget.partidoId);
+      final datos = {
+        'partidoId': widget.partidoId,
+        'timestamp': FieldValue.serverTimestamp(),
+        'periodo': _periodoActual,
+        'tiempoJuego': _formatDuration(_elapsed),
+        'equipoPrincipal': _equipoPrincipal,
+        'dorsalPrincipal': _dorsalPrincipal,
+        'equipoSecundario': _equipoSecundario,
+        'dorsalSecundario': _dorsalSecundario,
+        'zonaCampo': _zonaCampo,
+        'zonaPorteria': _zonaPorteria,
+        'zonaJuego': _zonaCampo,
+        'accion': _accionSeleccionada,
+        'minuto': _elapsed.inMinutes,
+        'segundo': _elapsed.inSeconds % 60,
+      };
+
+      await partidoRef.collection('ActaPartido').add(datos);
+
+      if (_accionSeleccionada == 'Gol' || _accionSeleccionada == 'Gol Contra') {
+        final incrementos = <String, dynamic>{};
+        setState(() {
+          if (_accionSeleccionada == 'Gol') {
+            if (_equipoPrincipal == 'local') {
+              incrementos['golesLocal'] = FieldValue.increment(1);
+              _golesLocal += 1;
+            } else {
+              incrementos['golesVisitante'] = FieldValue.increment(1);
+              _golesVisitante += 1;
+            }
+          } else {
+            if (_equipoPrincipal == 'local') {
+              incrementos['golesVisitante'] = FieldValue.increment(1);
+              _golesVisitante += 1;
+            } else {
+              incrementos['golesLocal'] = FieldValue.increment(1);
+              _golesLocal += 1;
+            }
+          }
+        });
+        if (incrementos.isNotEmpty) {
+          await partidoRef.update(incrementos);
+        }
+      }
+    } finally {
+      _resetFlujoAccion();
+    }
   }
 
   @override
@@ -822,7 +821,9 @@ class _PartidoEnJuegoScreenState extends State<PartidoEnJuegoScreen> {
                               accionSeleccionada: _accionSeleccionada,
                               nombreEquipoLocal: partidoActual.equipoLocalNombre,
                               nombreEquipoVisitante: partidoActual.equipoVisitanteNombre,
-                              onJugadorSeleccionado: _onJugadorSecundarioElegido,
+                              onJugadorSeleccionado: (equipo, dorsal) async {
+                                await _seleccionarJugadorSecundario(equipo, dorsal);
+                              },
                             )
                           : mostrarAcciones
                               ? _AccionesPanel(
@@ -857,7 +858,7 @@ class _PartidoEnJuegoScreenState extends State<PartidoEnJuegoScreen> {
                 ),
                 const SizedBox(height: 16),
                 _JugadoresActivosSection(
-                  titulo: partidoActual.equipoLocalNombre.toUpperCase(),
+                  titulo: 'Elegir: ${partidoActual.equipoLocalNombre}',
                   jugadores: _jugadoresLocal,
                   seleccionadoEquipo: _equipoPrincipal,
                   seleccionadoDorsal: _dorsalPrincipal,
@@ -867,7 +868,7 @@ class _PartidoEnJuegoScreenState extends State<PartidoEnJuegoScreen> {
                 ),
                 const SizedBox(height: 8),
                 _JugadoresActivosSection(
-                  titulo: partidoActual.equipoVisitanteNombre.toUpperCase(),
+                  titulo: 'Elegir: ${partidoActual.equipoVisitanteNombre}',
                   jugadores: _jugadoresVisitante,
                   seleccionadoEquipo: _equipoPrincipal,
                   seleccionadoDorsal: _dorsalPrincipal,
@@ -1221,7 +1222,7 @@ class _SeleccionarJugadorSecundarioPanel extends StatelessWidget {
   final String? accionSeleccionada;
   final String nombreEquipoLocal;
   final String nombreEquipoVisitante;
-  final void Function(String equipo, int dorsal) onJugadorSeleccionado;
+  final Future<void> Function(String equipo, int dorsal) onJugadorSeleccionado;
 
   @override
   Widget build(BuildContext context) {
@@ -1290,7 +1291,7 @@ class _SeleccionarJugadorSecundarioPanel extends StatelessWidget {
           children: [
             if (accionSeleccionada != null)
               Text(
-                'Selecciona dorsal secundario para ${accionSeleccionada!}',
+                accionSeleccionada!,
                 style: Theme.of(context).textTheme.titleMedium,
               ),
             if (accionSeleccionada != null) const SizedBox(height: 12),
@@ -1321,7 +1322,7 @@ class _JugadoresActivosSection extends StatelessWidget {
   final int? seleccionadoDorsal;
   final bool esperandoSecundario;
   final String equipoClave;
-  final void Function(String equipo, int dorsal) onTap;
+  final Future<void> Function(String equipo, int dorsal) onTap;
 
   @override
   Widget build(BuildContext context) {
@@ -1362,7 +1363,11 @@ class _JugadoresActivosSection extends StatelessWidget {
                 : baseColor;
 
             return GestureDetector(
-              onTap: isDisabled ? null : () => onTap(equipoClave, dorsal),
+              onTap: isDisabled
+                  ? null
+                  : () {
+                      onTap(equipoClave, dorsal);
+                    },
               child: AnimatedContainer(
                 duration: const Duration(milliseconds: 200),
                 width: 56,
