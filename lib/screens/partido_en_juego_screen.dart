@@ -511,6 +511,8 @@ class _PartidoEnJuegoScreenState extends State<PartidoEnJuegoScreen> {
         _mostrandoAcciones = false;
         _mostrandoPorteria = false;
         _esperandoJugadorSecundario = true;
+        // volvemos a mostrar la pista
+        _mostrandoZonas = true;
       }
     });
   }
@@ -541,24 +543,10 @@ class _PartidoEnJuegoScreenState extends State<PartidoEnJuegoScreen> {
   }
 
   List<Map<String, dynamic>> _parseJugadoresEnJuego(dynamic data) {
-    final rawList = data is List ? data : <dynamic>[];
-
-    return rawList
-        .map<Map<String, dynamic>>((item) {
-          if (item is num) {
-            // Caso actual: Firestore devuelve [3, 11, 22, ...]
-            return {'dorsal': item.toInt()};
-          }
-
-          if (item is Map<String, dynamic>) {
-            // Caso futuro: Firestore devuelve [{dorsal: 3, esPortero: true}, ...]
-            return item;
-          }
-
-          // Ignorar lo que no tenga dorsal
-          return <String, dynamic>{};
-        })
-        .where((m) => m['dorsal'] != null)
+    final lista = (data as List<dynamic>? ?? []);
+    return lista
+        .where((e) => (e as Map<String, dynamic>)['enJuego'] == true)
+        .map((e) => e as Map<String, dynamic>)
         .toList();
   }
 
@@ -620,6 +608,36 @@ class _PartidoEnJuegoScreenState extends State<PartidoEnJuegoScreen> {
   void _onSeleccionPorteria(String codigo) {
     setState(() {
       _zonaPorteria = codigo;
+    });
+
+    final accion = _accionSeleccionada;
+    if (accion == 'Gol' || accion == 'Gol Contra' || accion == 'Parada') {
+      final porteroLocal = _getPorteroActualLocal();
+      final porteroVisitante = _getPorteroActualVisitante();
+
+      setState(() {
+        if (accion == 'Parada') {
+          // El portero es el jugador principal; asignamos también el portero rival como secundario.
+          final esLocalPrincipal = _equipoPrincipal == 'local';
+          _equipoSecundario = esLocalPrincipal ? 'visitante' : 'local';
+          _dorsalSecundario = esLocalPrincipal ? porteroVisitante : porteroLocal;
+        } else {
+          final esLocalPrincipal = _equipoPrincipal == 'local';
+          _equipoSecundario = esLocalPrincipal ? 'visitante' : 'local';
+          _dorsalSecundario = esLocalPrincipal ? porteroVisitante : porteroLocal;
+        }
+
+        _mostrandoPorteria = false;
+        _mostrandoZonas = true;
+        _mostrandoAcciones = false;
+        _esperandoJugadorSecundario = false;
+      });
+
+      _registrarAccion();
+      return;
+    }
+
+    setState(() {
       _mostrandoPorteria = false;
       _esperandoJugadorSecundario = true;
       _mostrandoZonas = false;
