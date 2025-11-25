@@ -452,6 +452,12 @@ class _PartidoEnJuegoScreenState extends State<PartidoEnJuegoScreen> {
     return accion == 'Gol' || accion == 'Gol Contra' || accion == 'Parada';
   }
 
+  String? _equipoIdDesdeClave(String? clave) {
+    if (clave == 'local') return _partido?.equipoLocalId;
+    if (clave == 'visitante') return _partido?.equipoVisitanteId;
+    return null;
+  }
+
   void _seleccionarJugadorPrincipal(String equipo, int dorsal) {
     // Selecciona o deselecciona el jugador principal y prepara el flujo de selección
     final mismaSeleccion = _equipoPrincipal == equipo && _dorsalPrincipal == dorsal;
@@ -631,12 +637,40 @@ class _PartidoEnJuegoScreenState extends State<PartidoEnJuegoScreen> {
       _zonaPorteria = codigo;
     });
 
-    setState(() {
-      _mostrandoPorteria = false;
-      _esperandoJugadorSecundario = true;
-      _mostrandoZonas = false;
-      _mostrandoAcciones = false;
-    });
+    if (_accionSeleccionada == 'Gol' ||
+        _accionSeleccionada == 'Gol Contra' ||
+        _accionSeleccionada == 'Parada') {
+      final equipoPrincipalActual = _equipoPrincipal;
+      if (equipoPrincipalActual == null) {
+        return;
+      }
+      final equipoContrario =
+          equipoPrincipalActual == 'local' ? 'visitante' : 'local';
+      final listaRival = equipoContrario == 'local'
+          ? _jugadoresLocal
+          : _jugadoresVisitante;
+      final dorsalPortero = listaRival.isNotEmpty
+          ? (listaRival.first['dorsal'] as num?)?.toInt()
+          : null;
+
+      setState(() {
+        _equipoSecundario = equipoContrario;
+        _dorsalSecundario = dorsalPortero;
+        _mostrandoPorteria = false;
+        _esperandoJugadorSecundario = false;
+        _mostrandoZonas = false;
+        _mostrandoAcciones = false;
+      });
+
+      _registrarAccion();
+    } else {
+      setState(() {
+        _mostrandoPorteria = false;
+        _esperandoJugadorSecundario = true;
+        _mostrandoZonas = false;
+        _mostrandoAcciones = false;
+      });
+    }
   }
 
   Future<void> _registrarAccion() async {
@@ -660,14 +694,16 @@ class _PartidoEnJuegoScreenState extends State<PartidoEnJuegoScreen> {
           .collection('ActaPartido')
           .doc(widget.partidoId)
           .collection('Datos');
+      final equipoPrincipalId = _equipoIdDesdeClave(_equipoPrincipal);
+      final equipoSecundarioId = _equipoIdDesdeClave(_equipoSecundario);
       final datos = {
         'partidoId': widget.partidoId,
         'timestamp': FieldValue.serverTimestamp(),
         'periodo': _periodoActual,
         'tiempoJuego': _formatDuration(_elapsed),
-        'equipoPrincipal': _equipoPrincipal,
+        'equipoPrincipal': equipoPrincipalId,
         'dorsalPrincipal': _dorsalPrincipal,
-        'equipoSecundario': _equipoSecundario,
+        'equipoSecundario': equipoSecundarioId,
         'dorsalSecundario': _dorsalSecundario,
         'zonaCampo': _zonaCampo,
         'zonaPorteria': _zonaPorteria,
@@ -679,22 +715,12 @@ class _PartidoEnJuegoScreenState extends State<PartidoEnJuegoScreen> {
       if (_accionSeleccionada == 'Gol' || _accionSeleccionada == 'Gol Contra') {
         final incrementos = <String, dynamic>{};
         setState(() {
-          if (_accionSeleccionada == 'Gol') {
-            if (_equipoPrincipal == 'local') {
-              incrementos['golesLocal'] = FieldValue.increment(1);
-              _golesLocal += 1;
-            } else {
-              incrementos['golesVisitante'] = FieldValue.increment(1);
-              _golesVisitante += 1;
-            }
+          if (_equipoPrincipal == 'local') {
+            incrementos['golesLocal'] = FieldValue.increment(1);
+            _golesLocal += 1;
           } else {
-            if (_equipoPrincipal == 'local') {
-              incrementos['golesVisitante'] = FieldValue.increment(1);
-              _golesVisitante += 1;
-            } else {
-              incrementos['golesLocal'] = FieldValue.increment(1);
-              _golesLocal += 1;
-            }
+            incrementos['golesVisitante'] = FieldValue.increment(1);
+            _golesVisitante += 1;
           }
         });
         if (incrementos.isNotEmpty) {
