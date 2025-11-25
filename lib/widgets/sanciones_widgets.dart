@@ -47,28 +47,72 @@ class SancionEstado {
   }
 }
 
-Widget buildSancionChip(SancionEstado? sancion) {
-  if (sancion == null) return const SizedBox.shrink();
+String? buildTextoDosMin(SancionEstado s) {
+  if (s.dosMinTotales <= 0) return null;
 
-  switch (sancion.tipoVisual) {
-    case SancionVisualTipo.expulsadoAzul:
-      return _chip('AZ', Colors.indigo);
-
-    case SancionVisualTipo.expulsadoRoja:
-      return _chip('R', Colors.red.shade700);
-
-    case SancionVisualTipo.dosMinActiva:
-      final activas = sancion.dosMinActivas;
-      final text = activas > 1 ? '${activas}x2\'' : "2'";
-      return _chip(text, Colors.green);
-
-    case SancionVisualTipo.amarilla:
-      return _chip('A', Colors.orange);
-
-    case SancionVisualTipo.ninguna:
-      return const SizedBox.shrink();
+  final completadas = (s.dosMinTotales - (s.tieneDosMinActiva ? 1 : 0));
+  if (completadas <= 0) {
+    return "2'";
+  } else {
+    return "${completadas}x2'";
   }
 }
+
+Widget buildSancionChips(SancionEstado? s) {
+  if (s == null) return const SizedBox.shrink();
+
+  final chips = <Widget>[];
+
+  if (s.azules > 0) {
+    chips.add(_chip('AZ', Colors.indigo));
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: chips,
+    );
+  }
+
+  if (s.rojas > 0) {
+    chips.add(_chip('R', Colors.red));
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: chips,
+    );
+  }
+
+  final textoDosMin = buildTextoDosMin(s);
+  final tieneDosMin = textoDosMin != null;
+  final tieneAmarilla = s.amarillas > 0;
+
+  if (tieneAmarilla && tieneDosMin) {
+    chips.add(_chip('A', Colors.orange));
+    chips.add(const SizedBox(width: 4));
+    chips.add(_chip(textoDosMin, Colors.green));
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: chips,
+    );
+  }
+
+  if (tieneDosMin) {
+    chips.add(_chip(textoDosMin, Colors.green));
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: chips,
+    );
+  }
+
+  if (tieneAmarilla) {
+    chips.add(_chip('A', Colors.orange));
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: chips,
+    );
+  }
+
+  return const SizedBox.shrink();
+}
+
+Widget buildSancionChip(SancionEstado? sancion) => buildSancionChips(sancion);
 
 Widget _chip(String text, Color color) {
   return Container(

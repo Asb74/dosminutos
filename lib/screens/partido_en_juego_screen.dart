@@ -1567,7 +1567,7 @@ class _SeleccionarJugadorSecundarioPanel extends StatelessWidget {
                       SizedBox(
                         height: 18,
                         child: Center(
-                          child: buildSancionChip(sancion),
+                          child: buildSancionChips(sancion),
                         ),
                       ),
                       const SizedBox(height: 4),
@@ -1701,7 +1701,7 @@ class _JugadoresActivosSection extends StatelessWidget {
                     SizedBox(
                       height: 18,
                       child: Center(
-                        child: buildSancionChip(sancion),
+                        child: buildSancionChips(sancion),
                       ),
                     ),
                     const SizedBox(height: 4),
