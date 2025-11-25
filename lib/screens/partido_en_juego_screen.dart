@@ -1151,7 +1151,7 @@ class _PartidoEnJuegoScreenState extends State<PartidoEnJuegoScreen> {
                 ),
                 const SizedBox(height: 16),
                 _JugadoresActivosSection(
-                  titulo: 'Elegir: ${partidoActual.equipoLocalNombre}',
+                  titulo: '${partidoActual.equipoLocalNombre}',
                   jugadores: _jugadoresLocal,
                   seleccionadoEquipo: _equipoPrincipal,
                   seleccionadoDorsal: _dorsalPrincipal,
@@ -1162,7 +1162,7 @@ class _PartidoEnJuegoScreenState extends State<PartidoEnJuegoScreen> {
                 ),
                 const SizedBox(height: 8),
                 _JugadoresActivosSection(
-                  titulo: 'Elegir: ${partidoActual.equipoVisitanteNombre}',
+                  titulo: '${partidoActual.equipoVisitanteNombre}',
                   jugadores: _jugadoresVisitante,
                   seleccionadoEquipo: _equipoPrincipal,
                   seleccionadoDorsal: _dorsalPrincipal,
