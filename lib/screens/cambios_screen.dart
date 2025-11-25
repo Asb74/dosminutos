@@ -1,6 +1,6 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
-import 'sanciones_widgets.dart';
+import '../widgets/sanciones_widgets.dart';
 
 class CambiosScreen extends StatefulWidget {
   final String partidoId;
@@ -221,9 +221,10 @@ class _CambiosScreenState extends State<CambiosScreen> {
                                         }
 
                                         final sancion = obtenerSancionEstado(dorsalJugador);
-                                        final bool tiene2Activa = sancion?.tieneDosMinActiva ?? false;
                                         final bool expulsado = sancion?.expulsado ?? false;
-                                        final bool isDisabled = tiene2Activa || expulsado;
+                                        final bool tiene2Activa = sancion?.tieneDosMinActiva ?? false;
+
+                                        final bool isDisabled = expulsado || tiene2Activa;
 
                                         final avatarColor = isDisabled
                                             ? colorScheme.primary.withOpacity(0.35)

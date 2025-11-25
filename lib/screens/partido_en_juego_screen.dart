@@ -6,7 +6,7 @@ import 'package:wakelock_plus/wakelock_plus.dart';
 
 import '../models/partido.dart';
 import 'cambios_screen.dart';
-import 'sanciones_widgets.dart';
+import '../widgets/sanciones_widgets.dart';
 
 class PorteriaGridSelector extends StatelessWidget {
   const PorteriaGridSelector({
@@ -582,6 +582,14 @@ class _PartidoEnJuegoScreenState extends State<PartidoEnJuegoScreen> {
   void _seleccionarZonaCampo(String zona) {
     if (_equipoPrincipal == null || _dorsalPrincipal == null) {
       _mostrarSnackBar('Selecciona primero un dorsal principal.');
+      return;
+    }
+
+    final sancion = _getSancion(_equipoPrincipal!, _dorsalPrincipal!);
+    final bool expulsado = sancion?.expulsado ?? false;
+
+    if (expulsado) {
+      _mostrarSnackBar('No se pueden registrar acciones con un jugador expulsado.');
       return;
     }
 
@@ -1661,7 +1669,7 @@ class _JugadoresActivosSection extends StatelessWidget {
                 ? (esEquipoContrario ? false : !esDorsalPrincipal)
                 : (isEquipoPrincipal && seleccionadoDorsal != null && seleccionadoDorsal != dorsal);
 
-            final bool isDisabled = isDisabledBase || tiene2Activa || expulsado;
+            final bool isDisabled = isDisabledBase || tiene2Activa || (expulsado && esperandoSecundario);
 
             final baseColor = esPortero
                 ? (isSelected

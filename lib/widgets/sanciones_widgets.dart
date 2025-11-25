@@ -34,30 +34,34 @@ class SancionEstado {
   bool get expulsadoPorTresDosMin =>
       dosMinTotales >= 3 && rojas == 0 && azules == 0;
 
+  int get dosMinActivas => dosMinRestantes.where((s) => s > 0).length;
+
   SancionVisualTipo get tipoVisual {
     if (azules > 0) return SancionVisualTipo.expulsadoAzul;
     if (rojas > 0 || expulsadoPorTresDosMin || expulsadoPorDobleAmarilla) {
       return SancionVisualTipo.expulsadoRoja;
     }
-    if (tieneDosMinActiva) return SancionVisualTipo.dosMinActiva;
     if (amarillas > 0) return SancionVisualTipo.amarilla;
+    if (tieneDosMinActiva) return SancionVisualTipo.dosMinActiva;
     return SancionVisualTipo.ninguna;
   }
 }
 
 Widget? buildSancionChip(SancionEstado? sancion) {
   if (sancion == null) return null;
+
   switch (sancion.tipoVisual) {
     case SancionVisualTipo.dosMinActiva:
+      final activas = sancion.dosMinActivas;
       return Container(
-        padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
+        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
         decoration: BoxDecoration(
           color: Colors.green,
-          borderRadius: BorderRadius.circular(4),
+          borderRadius: BorderRadius.circular(6),
         ),
-        child: const Text(
-          "2'",
-          style: TextStyle(
+        child: Text(
+          '${activas}x 2\'',
+          style: const TextStyle(
             color: Colors.white,
             fontSize: 10,
             fontWeight: FontWeight.bold,
