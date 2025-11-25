@@ -656,6 +656,10 @@ class _PartidoEnJuegoScreenState extends State<PartidoEnJuegoScreen> {
 
       final partidoRef =
           FirebaseFirestore.instance.collection('Partidos').doc(widget.partidoId);
+      final accionesRef = FirebaseFirestore.instance
+          .collection('ActaPartido')
+          .doc(widget.partidoId)
+          .collection('Datos');
       final datos = {
         'partidoId': widget.partidoId,
         'timestamp': FieldValue.serverTimestamp(),
@@ -670,7 +674,7 @@ class _PartidoEnJuegoScreenState extends State<PartidoEnJuegoScreen> {
         'accion': _accionSeleccionada,
       };
 
-      await partidoRef.collection('ActaPartido').add(datos);
+      await accionesRef.add(datos);
 
       if (_accionSeleccionada == 'Gol' || _accionSeleccionada == 'Gol Contra') {
         final incrementos = <String, dynamic>{};
