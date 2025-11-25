@@ -7,6 +7,14 @@ import 'package:wakelock_plus/wakelock_plus.dart';
 import '../models/partido.dart';
 import 'cambios_screen.dart';
 
+enum SancionVisualTipo {
+  ninguna,
+  dosMinActiva,
+  amarilla,
+  expulsadoRoja,
+  expulsadoAzul,
+}
+
 class PorteriaGridSelector extends StatelessWidget {
   const PorteriaGridSelector({
     Key? key,
@@ -160,6 +168,77 @@ class SancionEstado {
 
   bool get expulsado =>
       rojas > 0 || azules > 0 || amarillas >= 2 || dosMinTotales >= 3;
+
+  bool get expulsadoPorDobleAmarilla =>
+      amarillas >= 2 && rojas == 0 && azules == 0;
+
+  bool get expulsadoPorTresDosMin =>
+      dosMinTotales >= 3 && rojas == 0 && azules == 0;
+
+  SancionVisualTipo get tipoVisual {
+    if (azules > 0) return SancionVisualTipo.expulsadoAzul;
+    if (rojas > 0 || expulsadoPorTresDosMin || expulsadoPorDobleAmarilla) {
+      return SancionVisualTipo.expulsadoRoja;
+    }
+    if (tieneDosMinActiva) return SancionVisualTipo.dosMinActiva;
+    if (amarillas > 0) return SancionVisualTipo.amarilla;
+    return SancionVisualTipo.ninguna;
+  }
+}
+
+Widget? buildSancionChip(SancionEstado? sancion) {
+  if (sancion == null) return null;
+  switch (sancion.tipoVisual) {
+    case SancionVisualTipo.dosMinActiva:
+      return Container(
+        padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
+        decoration: BoxDecoration(
+          color: Colors.green,
+          borderRadius: BorderRadius.circular(4),
+        ),
+        child: const Text(
+          "2'",
+          style: TextStyle(
+            color: Colors.white,
+            fontSize: 10,
+            fontWeight: FontWeight.bold,
+          ),
+        ),
+      );
+
+    case SancionVisualTipo.amarilla:
+      return Container(
+        width: 12,
+        height: 16,
+        decoration: BoxDecoration(
+          color: Colors.yellow,
+          borderRadius: BorderRadius.circular(2),
+        ),
+      );
+
+    case SancionVisualTipo.expulsadoRoja:
+      return Container(
+        width: 12,
+        height: 16,
+        decoration: BoxDecoration(
+          color: Colors.red,
+          borderRadius: BorderRadius.circular(2),
+        ),
+      );
+
+    case SancionVisualTipo.expulsadoAzul:
+      return Container(
+        width: 12,
+        height: 16,
+        decoration: BoxDecoration(
+          color: Colors.blue,
+          borderRadius: BorderRadius.circular(2),
+        ),
+      );
+
+    case SancionVisualTipo.ninguna:
+      return null;
+  }
 }
 
 class PartidoEnJuegoScreen extends StatefulWidget {
@@ -1568,35 +1647,17 @@ class _SeleccionarJugadorSecundarioPanel extends StatelessWidget {
                   ? (esPortero ? baseColor : Colors.grey.shade300)
                   : baseColor;
 
-              String? badgeText;
-              if (sancion != null) {
-                if (sancion.dosMinTotales > 0) {
-                  badgeText = '${sancion.dosMinTotales}x2\'';
-                }
-                if (sancion.amarillas > 0) {
-                  final amarillaText = '${sancion.amarillas}x🟨';
-                  badgeText = (badgeText == null) ? amarillaText : '$badgeText $amarillaText';
-                }
-                if (sancion.rojas > 0) {
-                  final rojaText = '🟥';
-                  badgeText = (badgeText == null) ? rojaText : '$badgeText $rojaText';
-                }
-                if (sancion.azules > 0) {
-                  final azulText = '🟦';
-                  badgeText = (badgeText == null) ? azulText : '$badgeText $azulText';
-                }
-              }
-
               return GestureDetector(
                 onTap: isDisabled ? null : () => onJugadorSeleccionado(equipoClave, dorsal),
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    if (badgeText != null)
-                      Text(
-                        badgeText,
-                        style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w600),
+                    SizedBox(
+                      height: 18,
+                      child: Center(
+                        child: buildSancionChip(sancion),
                       ),
+                    ),
                     AnimatedContainer(
                       duration: const Duration(milliseconds: 200),
                       width: 56,
@@ -1712,25 +1773,6 @@ class _JugadoresActivosSection extends StatelessWidget {
                 ? (esPortero ? baseColor : Colors.grey.shade300)
                 : baseColor;
 
-            String? badgeText;
-            if (sancion != null) {
-              if (sancion.dosMinTotales > 0) {
-                badgeText = '${sancion.dosMinTotales}x2\'';
-              }
-              if (sancion.amarillas > 0) {
-                final amarillaText = '${sancion.amarillas}x🟨';
-                badgeText = (badgeText == null) ? amarillaText : '$badgeText $amarillaText';
-              }
-              if (sancion.rojas > 0) {
-                final rojaText = '🟥';
-                badgeText = (badgeText == null) ? rojaText : '$badgeText $rojaText';
-              }
-              if (sancion.azules > 0) {
-                final azulText = '🟦';
-                badgeText = (badgeText == null) ? azulText : '$badgeText $azulText';
-              }
-            }
-
             return GestureDetector(
               onTap: isDisabled
                   ? null
@@ -1740,11 +1782,12 @@ class _JugadoresActivosSection extends StatelessWidget {
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  if (badgeText != null)
-                    Text(
-                      badgeText,
-                      style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w600),
+                  SizedBox(
+                    height: 18,
+                    child: Center(
+                      child: buildSancionChip(sancion),
                     ),
+                  ),
                   AnimatedContainer(
                     duration: const Duration(milliseconds: 200),
                     width: 56,
