@@ -261,7 +261,7 @@ class _CambiosScreenState extends State<CambiosScreen> {
                                                       SizedBox(
                                                         height: 18,
                                                         child: Center(
-                                                          child: buildSancionChip(sancion),
+                                                          child: buildSancionChips(sancion),
                                                         ),
                                                       ),
                                                       CircleAvatar(
