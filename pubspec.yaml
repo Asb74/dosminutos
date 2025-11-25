@@ -51,7 +51,8 @@ dev_dependencies:
   # rules and activating additional ones.
   flutter_lints: ^5.0.0
   flutter_launcher_icons: ^0.13.1
-
+  wakelock_plus: ^1.2.8
+  
 # Run `flutter pub run flutter_launcher_icons` to generate the platform launcher icons
 # using the configuration block below.
 flutter_launcher_icons:
