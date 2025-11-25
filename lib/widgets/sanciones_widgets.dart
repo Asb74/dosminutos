@@ -41,65 +41,50 @@ class SancionEstado {
     if (rojas > 0 || expulsadoPorTresDosMin || expulsadoPorDobleAmarilla) {
       return SancionVisualTipo.expulsadoRoja;
     }
-    if (amarillas > 0) return SancionVisualTipo.amarilla;
     if (tieneDosMinActiva) return SancionVisualTipo.dosMinActiva;
+    if (amarillas > 0) return SancionVisualTipo.amarilla;
     return SancionVisualTipo.ninguna;
   }
 }
 
-Widget? buildSancionChip(SancionEstado? sancion) {
-  if (sancion == null) return null;
+Widget buildSancionChip(SancionEstado? sancion) {
+  if (sancion == null) return const SizedBox.shrink();
 
   switch (sancion.tipoVisual) {
-    case SancionVisualTipo.dosMinActiva:
-      final activas = sancion.dosMinActivas;
-      return Container(
-        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-        decoration: BoxDecoration(
-          color: Colors.green,
-          borderRadius: BorderRadius.circular(6),
-        ),
-        child: Text(
-          '${activas}x 2\'',
-          style: const TextStyle(
-            color: Colors.white,
-            fontSize: 10,
-            fontWeight: FontWeight.bold,
-          ),
-        ),
-      );
-
-    case SancionVisualTipo.amarilla:
-      return Container(
-        width: 12,
-        height: 16,
-        decoration: BoxDecoration(
-          color: Colors.yellow,
-          borderRadius: BorderRadius.circular(2),
-        ),
-      );
+    case SancionVisualTipo.expulsadoAzul:
+      return _chip('AZ', Colors.indigo);
 
     case SancionVisualTipo.expulsadoRoja:
-      return Container(
-        width: 12,
-        height: 16,
-        decoration: BoxDecoration(
-          color: Colors.red,
-          borderRadius: BorderRadius.circular(2),
-        ),
-      );
+      return _chip('R', Colors.red.shade700);
 
-    case SancionVisualTipo.expulsadoAzul:
-      return Container(
-        width: 12,
-        height: 16,
-        decoration: BoxDecoration(
-          color: Colors.blue,
-          borderRadius: BorderRadius.circular(2),
-        ),
-      );
+    case SancionVisualTipo.dosMinActiva:
+      final activas = sancion.dosMinActivas;
+      final text = activas > 1 ? '${activas}x2\'' : "2'";
+      return _chip(text, Colors.green);
+
+    case SancionVisualTipo.amarilla:
+      return _chip('A', Colors.orange);
 
     case SancionVisualTipo.ninguna:
-      return null;
+      return const SizedBox.shrink();
   }
+}
+
+Widget _chip(String text, Color color) {
+  return Container(
+    constraints: const BoxConstraints(minHeight: 18),
+    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+    decoration: BoxDecoration(
+      color: color,
+      borderRadius: BorderRadius.circular(999),
+    ),
+    child: Text(
+      text,
+      style: const TextStyle(
+        fontSize: 10,
+        fontWeight: FontWeight.bold,
+        color: Colors.white,
+      ),
+    ),
+  );
 }
