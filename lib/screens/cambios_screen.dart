@@ -1,11 +1,13 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
+import 'sanciones_widgets.dart';
 
 class CambiosScreen extends StatefulWidget {
   final String partidoId;
   final String equipo; // 'local' o 'visitante'
   final int dorsal;
   final Map<String, dynamic> datosAccionBase;
+  final SancionEstado? Function(String equipoClave, int dorsal)? getSancionEstado;
 
   const CambiosScreen({
     Key? key,
@@ -13,6 +15,7 @@ class CambiosScreen extends StatefulWidget {
     required this.equipo,
     required this.dorsal,
     required this.datosAccionBase,
+    this.getSancionEstado,
   }) : super(key: key);
 
   @override
@@ -61,6 +64,8 @@ class _CambiosScreenState extends State<CambiosScreen> {
             }
 
             final data = snapshot.data!.data()!;
+            final equipoLocalId = data['equipoLocalId'] as String?;
+            final equipoVisitanteId = data['equipoVisitanteId'] as String?;
             final convocadosLocal = (data['convocadosLocal'] as List<dynamic>? ?? [])
                 .whereType<Map<String, dynamic>>()
                 .map((e) => Map<String, dynamic>.from(e))
@@ -115,117 +120,205 @@ class _CambiosScreenState extends State<CambiosScreen> {
               );
             }
 
-            return Padding(
-              padding: const EdgeInsets.all(16),
-              child: Column(
-                children: [
-                  Expanded(
-                    child: Card(
-                      elevation: 2,
-                      color: Colors.white,
-                      child: Padding(
-                        padding: const EdgeInsets.all(16),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              widget.equipo == 'local'
-                                  ? 'Convocados (local)'
-                                  : 'Convocados (visitante)',
-                              style: Theme.of(context)
-                                  .textTheme
-                                  .titleLarge
-                                  ?.copyWith(fontWeight: FontWeight.bold),
-                            ),
-                            const SizedBox(height: 16),
-                            if (banquillo.isEmpty)
-                              const Expanded(
-                                child: Center(
-                                  child: Text(
-                                    'No hay jugadores en el banquillo para este equipo.',
-                                    textAlign: TextAlign.center,
-                                  ),
+            return StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
+              stream: FirebaseFirestore.instance
+                  .collection('ActaPartido')
+                  .doc(widget.partidoId)
+                  .collection('Sanciones')
+                  .snapshots(),
+              builder: (context, sancionesSnapshot) {
+                if (sancionesSnapshot.connectionState == ConnectionState.waiting &&
+                    !sancionesSnapshot.hasData) {
+                  return const Center(child: CircularProgressIndicator());
+                }
+
+                final sancionesMap = <String, SancionEstado>{};
+
+                if (sancionesSnapshot.hasData) {
+                  for (final doc in sancionesSnapshot.data!.docs) {
+                    final sancionData = doc.data();
+                    final equipoId = sancionData['equipoId'] as String?;
+                    final dorsalSancion = (sancionData['dorsal'] as num?)?.toInt();
+                    final tipo = sancionData['tipo'] as String?;
+
+                    if (equipoId == null || dorsalSancion == null || tipo == null) continue;
+
+                    final key = '$equipoId#$dorsalSancion';
+                    final estado = sancionesMap.putIfAbsent(key, () => SancionEstado());
+
+                    switch (tipo) {
+                      case '2min':
+                        estado.dosMinTotales++;
+                        break;
+                      case 'amarilla':
+                        estado.amarillas++;
+                        break;
+                      case 'roja':
+                        estado.rojas++;
+                        break;
+                      case 'azul':
+                        estado.azules++;
+                        break;
+                    }
+                  }
+                }
+
+                SancionEstado? obtenerSancionEstado(int dorsalJugador) {
+                  if (widget.getSancionEstado != null) {
+                    return widget.getSancionEstado!(widget.equipo, dorsalJugador);
+                  }
+
+                  final equipoId = widget.equipo == 'local' ? equipoLocalId : equipoVisitanteId;
+                  if (equipoId == null) return null;
+
+                  return sancionesMap['$equipoId#$dorsalJugador'];
+                }
+
+                return Padding(
+                  padding: const EdgeInsets.all(16),
+                  child: Column(
+                    children: [
+                      Expanded(
+                        child: Card(
+                          elevation: 2,
+                          color: Colors.white,
+                          child: Padding(
+                            padding: const EdgeInsets.all(16),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  widget.equipo == 'local'
+                                      ? 'Convocados (local)'
+                                      : 'Convocados (visitante)',
+                                  style: Theme.of(context)
+                                      .textTheme
+                                      .titleLarge
+                                      ?.copyWith(fontWeight: FontWeight.bold),
                                 ),
-                              )
-                            else
-                              Expanded(
-                                child: ListView.separated(
-                                  itemCount: banquillo.length,
-                                  separatorBuilder: (_, __) => const Divider(height: 16),
-                                  itemBuilder: (context, index) {
-                                    final jugador = banquillo[index];
-                                    return InkWell(
-                                      onTap: () => _hacerCambio(
-                                        jugador,
-                                        convocadosLocal,
-                                        convocadosVisitante,
-                                        jugadorActualIndex,
-                                        esLocal,
-                                        jugadoresEnJuegoLocal,
-                                        jugadoresEnJuegoVisitante,
+                                const SizedBox(height: 16),
+                                if (banquillo.isEmpty)
+                                  const Expanded(
+                                    child: Center(
+                                      child: Text(
+                                        'No hay jugadores en el banquillo para este equipo.',
+                                        textAlign: TextAlign.center,
                                       ),
-                                      borderRadius: BorderRadius.circular(12),
-                                      child: Padding(
-                                        padding: const EdgeInsets.symmetric(
-                                          vertical: 8,
-                                          horizontal: 4,
-                                        ),
-                                        child: Row(
-                                          children: [
-                                            CircleAvatar(
-                                              radius: 24,
-                                              backgroundColor: colorScheme.primary,
-                                              child: Text(
-                                                (jugador['dorsal'] as num?)
-                                                        ?.toInt()
-                                                        .toString() ??
-                                                    '-',
-                                                style: TextStyle(
-                                                  color: colorScheme.onPrimary,
-                                                  fontWeight: FontWeight.bold,
-                                                  fontSize: 18,
+                                    ),
+                                  )
+                                else
+                                  Expanded(
+                                    child: ListView.separated(
+                                      itemCount: banquillo.length,
+                                      separatorBuilder: (_, __) => const Divider(height: 16),
+                                      itemBuilder: (context, index) {
+                                        final jugador = banquillo[index];
+                                        final dorsalJugador =
+                                            (jugador['dorsal'] as num?)?.toInt();
+
+                                        if (dorsalJugador == null) {
+                                          return const SizedBox.shrink();
+                                        }
+
+                                        final sancion = obtenerSancionEstado(dorsalJugador);
+                                        final bool tiene2Activa = sancion?.tieneDosMinActiva ?? false;
+                                        final bool expulsado = sancion?.expulsado ?? false;
+                                        final bool isDisabled = tiene2Activa || expulsado;
+
+                                        final avatarColor = isDisabled
+                                            ? colorScheme.primary.withOpacity(0.35)
+                                            : colorScheme.primary;
+                                        final textColor = isDisabled
+                                            ? colorScheme.onPrimary.withOpacity(0.5)
+                                            : colorScheme.onPrimary;
+
+                                        return InkWell(
+                                          onTap: isDisabled
+                                              ? null
+                                              : () => _hacerCambio(
+                                                    jugador,
+                                                    convocadosLocal,
+                                                    convocadosVisitante,
+                                                    jugadorActualIndex,
+                                                    esLocal,
+                                                    jugadoresEnJuegoLocal,
+                                                    jugadoresEnJuegoVisitante,
+                                                  ),
+                                          borderRadius: BorderRadius.circular(12),
+                                          child: Padding(
+                                            padding: const EdgeInsets.symmetric(
+                                              vertical: 8,
+                                              horizontal: 4,
+                                            ),
+                                            child: Row(
+                                              children: [
+                                                SizedBox(
+                                                  width: 56,
+                                                  child: Column(
+                                                    mainAxisSize: MainAxisSize.min,
+                                                    children: [
+                                                      SizedBox(
+                                                        height: 18,
+                                                        child: Center(
+                                                          child: buildSancionChip(sancion),
+                                                        ),
+                                                      ),
+                                                      CircleAvatar(
+                                                        radius: 24,
+                                                        backgroundColor: avatarColor,
+                                                        child: Text(
+                                                          dorsalJugador.toString(),
+                                                          style: TextStyle(
+                                                            color: textColor,
+                                                            fontWeight: FontWeight.bold,
+                                                            fontSize: 18,
+                                                          ),
+                                                        ),
+                                                      ),
+                                                    ],
+                                                  ),
                                                 ),
-                                              ),
-                                            ),
-                                            const SizedBox(width: 12),
-                                            Expanded(
-                                              child: Column(
-                                                crossAxisAlignment:
-                                                    CrossAxisAlignment.start,
-                                                children: [
-                                                  Text(
-                                                    (jugador['nombre'] as String? ?? '')
-                                                        .toUpperCase(),
-                                                    style: const TextStyle(
-                                                      fontWeight: FontWeight.bold,
-                                                      fontSize: 16,
-                                                    ),
+                                                const SizedBox(width: 12),
+                                                Expanded(
+                                                  child: Column(
+                                                    crossAxisAlignment:
+                                                        CrossAxisAlignment.start,
+                                                    children: [
+                                                      Text(
+                                                        (jugador['nombre'] as String? ?? '')
+                                                            .toUpperCase(),
+                                                        style: const TextStyle(
+                                                          fontWeight: FontWeight.bold,
+                                                          fontSize: 16,
+                                                        ),
+                                                      ),
+                                                      const SizedBox(height: 4),
+                                                      Text(
+                                                        jugador['posicion'] as String? ?? '',
+                                                        style: TextStyle(
+                                                          color: Colors.grey.shade700,
+                                                        ),
+                                                      ),
+                                                    ],
                                                   ),
-                                                  const SizedBox(height: 4),
-                                                  Text(
-                                                    jugador['posicion'] as String? ?? '',
-                                                    style: TextStyle(
-                                                      color: Colors.grey.shade700,
-                                                    ),
-                                                  ),
-                                                ],
-                                              ),
+                                                ),
+                                                const Icon(Icons.chevron_right),
+                                              ],
                                             ),
-                                            const Icon(Icons.chevron_right),
-                                          ],
-                                        ),
-                                      ),
-                                    );
-                                  },
-                                ),
-                              ),
-                          ],
+                                          ),
+                                        );
+                                      },
+                                    ),
+                                  ),
+                              ],
+                            ),
+                          ),
                         ),
                       ),
-                    ),
+                    ],
                   ),
-                ],
-              ),
+                );
+              },
             );
           },
         ),
