@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
+import 'package:wakelock_plus/wakelock_plus.dart';
 
 import '../models/partido.dart';
 import 'cambios_screen.dart';
@@ -186,8 +187,15 @@ class _PartidoEnJuegoScreenState extends State<PartidoEnJuegoScreen> {
   List<Map<String, dynamic>> _jugadoresVisitante = [];
 
   @override
+  void initState() {
+    super.initState();
+    WakelockPlus.enable();
+  }
+
+  @override
   void dispose() {
     _timer?.cancel();
+    WakelockPlus.disable();
     super.dispose();
   }
 
@@ -201,9 +209,8 @@ class _PartidoEnJuegoScreenState extends State<PartidoEnJuegoScreen> {
     return 30 * 60;
   }
 
-  void _startTimer() {
-    if (_isPlaying) return;
-
+  void _iniciarTimerLocal() {
+    _timer?.cancel();
     _timer = Timer.periodic(const Duration(seconds: 1), (_) {
       setState(() {
         _elapsed += const Duration(seconds: 1);
@@ -215,10 +222,10 @@ class _PartidoEnJuegoScreenState extends State<PartidoEnJuegoScreen> {
         setState(() {
           _elapsed = Duration(seconds: maxSegundos);
         });
-        _pauseTimer();
-        _mostrarSnackBar('Fin del periodo $_periodoActual');
+        _finalizarPeriodoPorTiempo();
         return;
       }
+
       if (_ticksSincePersist >= 15) {
         _persistTiempo();
         _ticksSincePersist = 0;
@@ -230,13 +237,45 @@ class _PartidoEnJuegoScreenState extends State<PartidoEnJuegoScreen> {
     });
   }
 
-  void _pauseTimer() {
+  Future<void> _finalizarPeriodoPorTiempo() async {
+    await _pauseTimer();
+    _mostrarSnackBar('Fin del periodo $_periodoActual');
+  }
+
+  Future<void> _startTimer() async {
+    if (_isPlaying) return;
+
+    final nowEpoch = DateTime.now().millisecondsSinceEpoch;
+
+    await FirebaseFirestore.instance
+        .collection('Partidos')
+        .doc(widget.partidoId)
+        .update({
+      'segundoPartido': _elapsed.inSeconds,
+      'periodoActual': _periodoActual,
+      'timerRunning': true,
+      'timerStartEpochMs': nowEpoch,
+    });
+
+    _iniciarTimerLocal();
+  }
+
+  Future<void> _pauseTimer() async {
     _timer?.cancel();
     _timer = null;
     setState(() {
       _isPlaying = false;
     });
-    _persistTiempo();
+    final segundos = _elapsed.inSeconds;
+    await FirebaseFirestore.instance
+        .collection('Partidos')
+        .doc(widget.partidoId)
+        .update({
+      'segundoPartido': segundos,
+      'periodoActual': _periodoActual,
+      'timerRunning': false,
+      'timerStartEpochMs': null,
+    });
     _ticksSincePersist = 0;
   }
 
@@ -327,6 +366,8 @@ class _PartidoEnJuegoScreenState extends State<PartidoEnJuegoScreen> {
     await FirebaseFirestore.instance.collection('Partidos').doc(widget.partidoId).update({
       'periodoActual': _periodoActual,
       'segundoPartido': 0,
+      'timerRunning': false,
+      'timerStartEpochMs': null,
     });
   }
 
@@ -379,10 +420,20 @@ class _PartidoEnJuegoScreenState extends State<PartidoEnJuegoScreen> {
   }
 
   Future<void> _persistTiempo() async {
-    await FirebaseFirestore.instance.collection('Partidos').doc(widget.partidoId).update({
+    final updateData = {
       'segundoPartido': _elapsed.inSeconds,
       'periodoActual': _periodoActual,
-    });
+    };
+
+    if (_isPlaying) {
+      updateData['timerRunning'] = true;
+      updateData['timerStartEpochMs'] = DateTime.now().millisecondsSinceEpoch;
+    }
+
+    await FirebaseFirestore.instance
+        .collection('Partidos')
+        .doc(widget.partidoId)
+        .update(updateData);
   }
 
   Future<void> _finalizarPartido() async {
@@ -408,7 +459,7 @@ class _PartidoEnJuegoScreenState extends State<PartidoEnJuegoScreen> {
 
     if (aceptar != true) return;
 
-    _pauseTimer();
+    await _pauseTimer();
     await FirebaseFirestore.instance.collection('Partidos').doc(widget.partidoId).update({
       'estado': 'Finalizado',
       'segundoPartido': _elapsed.inSeconds,
@@ -617,19 +668,54 @@ class _PartidoEnJuegoScreenState extends State<PartidoEnJuegoScreen> {
     final jugadoresVisitanteEnJuego =
         _jugadoresEnJuegoDesdeConvocados(data, esLocal: false);
 
+    final baseSegundos = (data['segundoPartido'] as num?)?.toInt() ?? 0;
+    final timerRunningRemoto = data['timerRunning'] as bool? ?? false;
+    final timerStartEpochMs = data['timerStartEpochMs'] as int?;
+    final periodoData = (data['periodoActual'] as String?) ?? _periodoActual;
+
+    int totalSegundos = baseSegundos;
+    if (timerRunningRemoto && timerStartEpochMs != null) {
+      final nowEpoch = DateTime.now().millisecondsSinceEpoch;
+      final extra = ((nowEpoch - timerStartEpochMs) ~/ 1000);
+      if (extra > 0) {
+        totalSegundos += extra;
+      }
+    }
+
+    int maxSegundos;
+    if (periodoData == '1º Tiempo' || periodoData == '2º Tiempo') {
+      maxSegundos = 30 * 60;
+    } else if (periodoData == '1ª Prórroga' || periodoData == '2ª Prórroga') {
+      maxSegundos = 5 * 60;
+    } else {
+      maxSegundos = _maxSegundosPeriodo();
+    }
+    if (totalSegundos > maxSegundos) {
+      totalSegundos = maxSegundos;
+    }
+
     setState(() {
       _partido = partido;
       _jugadoresLocal = jugadoresLocalEnJuego;
       _jugadoresVisitante = jugadoresVisitanteEnJuego;
       _golesLocal = partido.golesLocal;
       _golesVisitante = partido.golesVisitante;
-      _periodoActual = (data['periodoActual'] as String?) ?? _periodoActual;
-      final segundos = (data['segundoPartido'] as num?)?.toInt() ?? 0;
-      if (!_isPlaying) {
-        _elapsed = Duration(seconds: segundos);
-      }
+      _periodoActual = periodoData;
+      _elapsed = Duration(seconds: totalSegundos);
       _initialized = true;
     });
+
+    if (timerRunningRemoto) {
+      if (!_isPlaying || _timer == null) {
+        _iniciarTimerLocal();
+      }
+    } else {
+      _timer?.cancel();
+      _timer = null;
+      setState(() {
+        _isPlaying = false;
+      });
+    }
   }
 
   void _onSeleccionPorteria(String codigo) {
@@ -806,8 +892,12 @@ class _PartidoEnJuegoScreenState extends State<PartidoEnJuegoScreen> {
                   onEditLocal: () => _editarGoles(esLocal: true),
                   onEditVisitante: () => _editarGoles(esLocal: false),
                   onCambiarPeriodo: _cambiarPeriodo,
-                  onStart: _startTimer,
-                  onPause: _pauseTimer,
+                  onStart: () {
+                    _startTimer();
+                  },
+                  onPause: () {
+                    _pauseTimer();
+                  },
                   onEditTiempo: _editarTiempo,
                 ),
                 const SizedBox(height: 12),
