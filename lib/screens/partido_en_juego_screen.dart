@@ -1559,34 +1559,38 @@ class _SeleccionarJugadorSecundarioPanel extends StatelessWidget {
 
               return GestureDetector(
                 onTap: isDisabled ? null : () => onJugadorSeleccionado(equipoClave, dorsal),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    SizedBox(
-                      height: 18,
-                      child: Center(
-                        child: buildSancionChip(sancion),
-                      ),
-                    ),
-                    AnimatedContainer(
-                      duration: const Duration(milliseconds: 200),
-                      width: 56,
-                      height: 56,
-                      decoration: BoxDecoration(
-                        color: color,
-                        shape: BoxShape.circle,
-                      ),
-                      alignment: Alignment.center,
-                      child: Text(
-                        dorsal.toString(),
-                        style: TextStyle(
-                          fontWeight: FontWeight.bold,
-                          fontSize: 16,
-                          color: isDisabled ? Colors.black45 : Colors.black87,
+                child: SizedBox(
+                  width: 64,
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      SizedBox(
+                        height: 18,
+                        child: Center(
+                          child: buildSancionChip(sancion),
                         ),
                       ),
-                    ),
-                  ],
+                      const SizedBox(height: 4),
+                      AnimatedContainer(
+                        duration: const Duration(milliseconds: 200),
+                        width: 56,
+                        height: 56,
+                        decoration: BoxDecoration(
+                          color: color,
+                          shape: BoxShape.circle,
+                        ),
+                        alignment: Alignment.center,
+                        child: Text(
+                          dorsal.toString(),
+                          style: TextStyle(
+                            fontWeight: FontWeight.bold,
+                            fontSize: 16,
+                            color: isDisabled ? Colors.black45 : Colors.black87,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
               );
             }).toList(),
@@ -1689,42 +1693,46 @@ class _JugadoresActivosSection extends StatelessWidget {
                   : () {
                       onTap(equipoClave, dorsal);
                     },
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  SizedBox(
-                    height: 18,
-                    child: Center(
-                      child: buildSancionChip(sancion),
-                    ),
-                  ),
-                  AnimatedContainer(
-                    duration: const Duration(milliseconds: 200),
-                    width: 56,
-                    height: 56,
-                    decoration: BoxDecoration(
-                      color: color,
-                      shape: BoxShape.circle,
-                      boxShadow: isSelected
-                          ? [
-                              const BoxShadow(
-                                  color: Colors.black26, blurRadius: 4, offset: Offset(0, 2))
-                            ]
-                          : null,
-                    ),
-                    alignment: Alignment.center,
-                    child: Text(
-                      dorsal.toString(),
-                      style: TextStyle(
-                        fontWeight: FontWeight.bold,
-                        fontSize: 16,
-                        color: isDisabled
-                            ? Colors.black45
-                            : (isSelected ? Colors.black : Colors.black87),
+              child: SizedBox(
+                width: 64,
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    SizedBox(
+                      height: 18,
+                      child: Center(
+                        child: buildSancionChip(sancion),
                       ),
                     ),
-                  ),
-                ],
+                    const SizedBox(height: 4),
+                    AnimatedContainer(
+                      duration: const Duration(milliseconds: 200),
+                      width: 56,
+                      height: 56,
+                      decoration: BoxDecoration(
+                        color: color,
+                        shape: BoxShape.circle,
+                        boxShadow: isSelected
+                            ? [
+                                const BoxShadow(
+                                    color: Colors.black26, blurRadius: 4, offset: Offset(0, 2))
+                              ]
+                            : null,
+                      ),
+                      alignment: Alignment.center,
+                      child: Text(
+                        dorsal.toString(),
+                        style: TextStyle(
+                          fontWeight: FontWeight.bold,
+                          fontSize: 16,
+                          color: isDisabled
+                              ? Colors.black45
+                              : (isSelected ? Colors.black : Colors.black87),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
               ),
             );
           }).toList(),
