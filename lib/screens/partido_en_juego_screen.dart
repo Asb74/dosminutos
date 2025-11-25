@@ -141,6 +141,27 @@ class _PorteriaGridPainter extends CustomPainter {
   }
 }
 
+class SancionEstado {
+  int amarillas;
+  int rojas;
+  int azules;
+  int dosMinTotales;
+  List<int> dosMinRestantes;
+
+  SancionEstado({
+    this.amarillas = 0,
+    this.rojas = 0,
+    this.azules = 0,
+    this.dosMinTotales = 0,
+    List<int>? dosMinRestantes,
+  }) : dosMinRestantes = dosMinRestantes ?? [];
+
+  bool get tieneDosMinActiva => dosMinRestantes.any((s) => s > 0);
+
+  bool get expulsado =>
+      rojas > 0 || azules > 0 || amarillas >= 2 || dosMinTotales >= 3;
+}
+
 class PartidoEnJuegoScreen extends StatefulWidget {
   final String partidoId;
 
@@ -151,6 +172,8 @@ class PartidoEnJuegoScreen extends StatefulWidget {
 }
 
 class _PartidoEnJuegoScreenState extends State<PartidoEnJuegoScreen> {
+  final Map<String, SancionEstado> _estadoSanciones = {};
+
   final List<String> _periodos = const [
     '1º Tiempo',
     '2º Tiempo',
@@ -185,6 +208,19 @@ class _PartidoEnJuegoScreenState extends State<PartidoEnJuegoScreen> {
   Partido? _partido;
   List<Map<String, dynamic>> _jugadoresLocal = [];
   List<Map<String, dynamic>> _jugadoresVisitante = [];
+  bool _sancionesCargadas = false;
+
+  String _keySancion(String equipoId, int dorsal) => '$equipoId#$dorsal';
+
+  SancionEstado _getOrCreateSancion(String equipoId, int dorsal) {
+    final key = _keySancion(equipoId, dorsal);
+    return _estadoSanciones.putIfAbsent(key, () => SancionEstado());
+  }
+
+  SancionEstado? _getSancion(String equipoId, int dorsal) {
+    final key = _keySancion(equipoId, dorsal);
+    return _estadoSanciones[key];
+  }
 
   @override
   void initState() {
@@ -230,6 +266,8 @@ class _PartidoEnJuegoScreenState extends State<PartidoEnJuegoScreen> {
         _persistTiempo();
         _ticksSincePersist = 0;
       }
+
+      _tickSanciones();
     });
 
     setState(() {
@@ -436,6 +474,24 @@ class _PartidoEnJuegoScreenState extends State<PartidoEnJuegoScreen> {
         .update(updateData);
   }
 
+  void _tickSanciones() {
+    bool changed = false;
+
+    _estadoSanciones.forEach((key, estado) {
+      for (int i = 0; i < estado.dosMinRestantes.length; i++) {
+        if (estado.dosMinRestantes[i] > 0) {
+          estado.dosMinRestantes[i]--;
+          changed = true;
+        }
+      }
+      estado.dosMinRestantes.removeWhere((s) => s <= 0);
+    });
+
+    if (changed && mounted) {
+      setState(() {});
+    }
+  }
+
   Future<void> _finalizarPartido() async {
     final aceptar = await showDialog<bool>(
       context: context,
@@ -507,6 +563,16 @@ class _PartidoEnJuegoScreenState extends State<PartidoEnJuegoScreen> {
     if (clave == 'local') return _partido?.equipoLocalId;
     if (clave == 'visitante') return _partido?.equipoVisitanteId;
     return null;
+  }
+
+  String? _equipoIdDesdeClaveNoNull(String equipoClave) {
+    return _equipoIdDesdeClave(equipoClave);
+  }
+
+  SancionEstado? _getSancionDesdeClave(String equipoClave, int dorsal) {
+    final equipoId = _equipoIdDesdeClaveNoNull(equipoClave);
+    if (equipoId == null) return null;
+    return _getSancion(equipoId, dorsal);
   }
 
   void _seleccionarJugadorPrincipal(String equipo, int dorsal) {
@@ -656,6 +722,45 @@ class _PartidoEnJuegoScreenState extends State<PartidoEnJuegoScreen> {
     return lista;
   }
 
+  Future<void> _cargarSancionesIniciales() async {
+    final partidaRef =
+        FirebaseFirestore.instance.collection('ActaPartido').doc(widget.partidoId);
+
+    final snap = await partidaRef.collection('Sanciones').get();
+
+    _estadoSanciones.clear();
+
+    for (final doc in snap.docs) {
+      final data = doc.data();
+      final equipoId = data['equipoId'] as String?;
+      final dorsal = (data['dorsal'] as num?)?.toInt();
+      final tipo = data['tipo'] as String?;
+
+      if (equipoId == null || dorsal == null || tipo == null) continue;
+
+      final estado = _getOrCreateSancion(equipoId, dorsal);
+
+      switch (tipo) {
+        case '2min':
+          estado.dosMinTotales++;
+          break;
+        case 'amarilla':
+          estado.amarillas++;
+          break;
+        case 'roja':
+          estado.rojas++;
+          break;
+        case 'azul':
+          estado.azules++;
+          break;
+      }
+    }
+
+    if (mounted) {
+      setState(() {});
+    }
+  }
+
   int? _getPorteroActualLocal() =>
       _jugadoresLocal.isNotEmpty ? (_jugadoresLocal.first['dorsal'] as num?)?.toInt() : null;
   int? _getPorteroActualVisitante() =>
@@ -704,6 +809,11 @@ class _PartidoEnJuegoScreenState extends State<PartidoEnJuegoScreen> {
       _elapsed = Duration(seconds: totalSegundos);
       _initialized = true;
     });
+
+    if (!_sancionesCargadas) {
+      _sancionesCargadas = true;
+      await _cargarSancionesIniciales();
+    }
 
     if (timerRunningRemoto) {
       if (!_isPlaying || _timer == null) {
@@ -756,6 +866,64 @@ class _PartidoEnJuegoScreenState extends State<PartidoEnJuegoScreen> {
         _mostrandoZonas = false;
         _mostrandoAcciones = false;
       });
+    }
+  }
+
+  bool _esAccionSancion(String accion) {
+    return accion == '2 minutos' ||
+        accion == 'Tarjeta Amarilla' ||
+        accion == 'Tarjeta Roja' ||
+        accion == 'Tarjeta Azul';
+  }
+
+  Future<void> _aplicarYGuardarSancion(String accion) async {
+    if (_equipoPrincipal == null || _dorsalPrincipal == null) return;
+
+    final String? equipoId = _equipoIdDesdeClave(_equipoPrincipal);
+    if (equipoId == null) return;
+    final int dorsal = _dorsalPrincipal!;
+
+    final estado = _getOrCreateSancion(equipoId, dorsal);
+
+    String tipo;
+    switch (accion) {
+      case '2 minutos':
+        tipo = '2min';
+        estado.dosMinTotales++;
+        estado.dosMinRestantes.add(120);
+        break;
+      case 'Tarjeta Amarilla':
+        tipo = 'amarilla';
+        estado.amarillas++;
+        break;
+      case 'Tarjeta Roja':
+        tipo = 'roja';
+        estado.rojas++;
+        break;
+      case 'Tarjeta Azul':
+        tipo = 'azul';
+        estado.azules++;
+        break;
+      default:
+        return;
+    }
+
+    await FirebaseFirestore.instance
+        .collection('ActaPartido')
+        .doc(widget.partidoId)
+        .collection('Sanciones')
+        .add({
+      'partidoId': widget.partidoId,
+      'timestamp': FieldValue.serverTimestamp(),
+      'periodo': _periodoActual,
+      'tiempoJuego': _formatDuration(_elapsed),
+      'equipoId': equipoId,
+      'dorsal': dorsal,
+      'tipo': tipo,
+    });
+
+    if (mounted) {
+      setState(() {});
     }
   }
 
@@ -812,6 +980,10 @@ class _PartidoEnJuegoScreenState extends State<PartidoEnJuegoScreen> {
         if (incrementos.isNotEmpty) {
           await partidoRef.update(incrementos);
         }
+      }
+
+      if (_accionSeleccionada != null && _esAccionSancion(_accionSeleccionada!)) {
+        await _aplicarYGuardarSancion(_accionSeleccionada!);
       }
 
       _resetFlujoAccion();
@@ -956,6 +1128,7 @@ class _PartidoEnJuegoScreenState extends State<PartidoEnJuegoScreen> {
                               onJugadorSeleccionado: (equipo, dorsal) async {
                                 await _onDorsalSecundarioSeleccionado(equipo, dorsal);
                               },
+                              getSancionEstado: _getSancionDesdeClave,
                             )
                           : mostrarAcciones
                               ? _AccionesPanel(
@@ -997,6 +1170,7 @@ class _PartidoEnJuegoScreenState extends State<PartidoEnJuegoScreen> {
                   esperandoSecundario: _esperandoJugadorSecundario,
                   equipoClave: 'local',
                   onTap: _seleccionarJugadorSecundario,
+                  getSancionEstado: _getSancionDesdeClave,
                 ),
                 const SizedBox(height: 8),
                 _JugadoresActivosSection(
@@ -1007,6 +1181,7 @@ class _PartidoEnJuegoScreenState extends State<PartidoEnJuegoScreen> {
                   esperandoSecundario: _esperandoJugadorSecundario,
                   equipoClave: 'visitante',
                   onTap: _seleccionarJugadorSecundario,
+                  getSancionEstado: _getSancionDesdeClave,
                 ),
                 const SizedBox(height: 16),
                 FilledButton.icon(
@@ -1344,6 +1519,7 @@ class _SeleccionarJugadorSecundarioPanel extends StatelessWidget {
     required this.nombreEquipoLocal,
     required this.nombreEquipoVisitante,
     required this.onJugadorSeleccionado,
+    required this.getSancionEstado,
     Key? key,
   }) : super(key: key);
 
@@ -1355,6 +1531,7 @@ class _SeleccionarJugadorSecundarioPanel extends StatelessWidget {
   final String nombreEquipoLocal;
   final String nombreEquipoVisitante;
   final Future<void> Function(String equipo, int dorsal) onJugadorSeleccionado;
+  final SancionEstado? Function(String equipoClave, int dorsal) getSancionEstado;
 
   @override
   Widget build(BuildContext context) {
@@ -1378,34 +1555,67 @@ class _SeleccionarJugadorSecundarioPanel extends StatelessWidget {
               final esDorsalPrincipal = esEquipoPrincipal && dorsalPrincipal == dorsal;
               final esPortero =
                   ((jugador['posicion'] as String?)?.toLowerCase() ?? '').contains('portero');
+              final sancion = getSancionEstado(equipoClave, dorsal);
+              final bool tiene2Activa = sancion?.tieneDosMinActiva ?? false;
+              final bool expulsado = sancion?.expulsado ?? false;
               final baseColor = esPortero
                   ? Colors.lightBlue.shade200
                   : Colors.amber.shade100;
 
-              final isDisabled = esEquipoPrincipal && !esDorsalPrincipal;
+              final isDisabled =
+                  (esEquipoPrincipal && !esDorsalPrincipal) || tiene2Activa || expulsado;
               final color = isDisabled
                   ? (esPortero ? baseColor : Colors.grey.shade300)
                   : baseColor;
 
+              String? badgeText;
+              if (sancion != null) {
+                if (sancion.dosMinTotales > 0) {
+                  badgeText = '${sancion.dosMinTotales}x2\'';
+                }
+                if (sancion.amarillas > 0) {
+                  final amarillaText = '${sancion.amarillas}x🟨';
+                  badgeText = (badgeText == null) ? amarillaText : '$badgeText $amarillaText';
+                }
+                if (sancion.rojas > 0) {
+                  final rojaText = '🟥';
+                  badgeText = (badgeText == null) ? rojaText : '$badgeText $rojaText';
+                }
+                if (sancion.azules > 0) {
+                  final azulText = '🟦';
+                  badgeText = (badgeText == null) ? azulText : '$badgeText $azulText';
+                }
+              }
+
               return GestureDetector(
                 onTap: isDisabled ? null : () => onJugadorSeleccionado(equipoClave, dorsal),
-                child: AnimatedContainer(
-                  duration: const Duration(milliseconds: 200),
-                  width: 56,
-                  height: 56,
-                  decoration: BoxDecoration(
-                    color: color,
-                    shape: BoxShape.circle,
-                  ),
-                  alignment: Alignment.center,
-                  child: Text(
-                    dorsal.toString(),
-                    style: TextStyle(
-                      fontWeight: FontWeight.bold,
-                      fontSize: 16,
-                      color: isDisabled ? Colors.black45 : Colors.black87,
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    if (badgeText != null)
+                      Text(
+                        badgeText,
+                        style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w600),
+                      ),
+                    AnimatedContainer(
+                      duration: const Duration(milliseconds: 200),
+                      width: 56,
+                      height: 56,
+                      decoration: BoxDecoration(
+                        color: color,
+                        shape: BoxShape.circle,
+                      ),
+                      alignment: Alignment.center,
+                      child: Text(
+                        dorsal.toString(),
+                        style: TextStyle(
+                          fontWeight: FontWeight.bold,
+                          fontSize: 16,
+                          color: isDisabled ? Colors.black45 : Colors.black87,
+                        ),
+                      ),
                     ),
-                  ),
+                  ],
                 ),
               );
             }).toList(),
@@ -1446,6 +1656,7 @@ class _JugadoresActivosSection extends StatelessWidget {
     required this.esperandoSecundario,
     required this.equipoClave,
     required this.onTap,
+    required this.getSancionEstado,
   });
 
   final String titulo;
@@ -1455,6 +1666,7 @@ class _JugadoresActivosSection extends StatelessWidget {
   final bool esperandoSecundario;
   final String equipoClave;
   final Future<void> Function(String equipo, int dorsal) onTap;
+  final SancionEstado? Function(String equipoClave, int dorsal) getSancionEstado;
 
   @override
   Widget build(BuildContext context) {
@@ -1478,10 +1690,15 @@ class _JugadoresActivosSection extends StatelessWidget {
             final esEquipoContrario = seleccionadoEquipo != null && seleccionadoEquipo != equipoClave;
             final esDorsalPrincipal = isEquipoPrincipal && seleccionadoDorsal == dorsal;
             final esPortero = jugadores.indexOf(jugador) == 0;
+            final sancion = getSancionEstado(equipoClave, dorsal);
+            final bool tiene2Activa = sancion?.tieneDosMinActiva ?? false;
+            final bool expulsado = sancion?.expulsado ?? false;
 
-            final isDisabled = esperandoSecundario
+            bool isDisabledBase = esperandoSecundario
                 ? (esEquipoContrario ? false : !esDorsalPrincipal)
                 : (isEquipoPrincipal && seleccionadoDorsal != null && seleccionadoDorsal != dorsal);
+
+            final bool isDisabled = isDisabledBase || tiene2Activa || expulsado;
 
             final baseColor = esPortero
                 ? (isSelected
@@ -1495,34 +1712,66 @@ class _JugadoresActivosSection extends StatelessWidget {
                 ? (esPortero ? baseColor : Colors.grey.shade300)
                 : baseColor;
 
+            String? badgeText;
+            if (sancion != null) {
+              if (sancion.dosMinTotales > 0) {
+                badgeText = '${sancion.dosMinTotales}x2\'';
+              }
+              if (sancion.amarillas > 0) {
+                final amarillaText = '${sancion.amarillas}x🟨';
+                badgeText = (badgeText == null) ? amarillaText : '$badgeText $amarillaText';
+              }
+              if (sancion.rojas > 0) {
+                final rojaText = '🟥';
+                badgeText = (badgeText == null) ? rojaText : '$badgeText $rojaText';
+              }
+              if (sancion.azules > 0) {
+                final azulText = '🟦';
+                badgeText = (badgeText == null) ? azulText : '$badgeText $azulText';
+              }
+            }
+
             return GestureDetector(
               onTap: isDisabled
                   ? null
                   : () {
                       onTap(equipoClave, dorsal);
                     },
-              child: AnimatedContainer(
-                duration: const Duration(milliseconds: 200),
-                width: 56,
-                height: 56,
-                decoration: BoxDecoration(
-                  color: color,
-                  shape: BoxShape.circle,
-                  boxShadow: isSelected
-                      ? [const BoxShadow(color: Colors.black26, blurRadius: 4, offset: Offset(0, 2))]
-                      : null,
-                ),
-                alignment: Alignment.center,
-                child: Text(
-                  dorsal.toString(),
-                  style: TextStyle(
-                    fontWeight: FontWeight.bold,
-                    fontSize: 16,
-                    color: isDisabled
-                        ? Colors.black45
-                        : (isSelected ? Colors.black : Colors.black87),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  if (badgeText != null)
+                    Text(
+                      badgeText,
+                      style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w600),
+                    ),
+                  AnimatedContainer(
+                    duration: const Duration(milliseconds: 200),
+                    width: 56,
+                    height: 56,
+                    decoration: BoxDecoration(
+                      color: color,
+                      shape: BoxShape.circle,
+                      boxShadow: isSelected
+                          ? [
+                              const BoxShadow(
+                                  color: Colors.black26, blurRadius: 4, offset: Offset(0, 2))
+                            ]
+                          : null,
+                    ),
+                    alignment: Alignment.center,
+                    child: Text(
+                      dorsal.toString(),
+                      style: TextStyle(
+                        fontWeight: FontWeight.bold,
+                        fontSize: 16,
+                        color: isDisabled
+                            ? Colors.black45
+                            : (isSelected ? Colors.black : Colors.black87),
+                      ),
+                    ),
                   ),
-                ),
+                ],
               ),
             );
           }).toList(),
