@@ -141,6 +141,7 @@ class _EstadisticasBody extends StatelessWidget {
                 }
 
                 final stats = calcularEstadisticasPartidoDesdeSnapshots(
+                  partidoData: data,
                   datosSnapshot: datosSnapshot.data!,
                   sancionesSnapshot: sancionesSnapshot.data!,
                 );
@@ -199,6 +200,12 @@ class _EquipoStatsTab extends StatelessWidget {
     required this.mapaConvocados,
   }) : super(key: key);
 
+  String _formatearTiempo(int segs) {
+    final minutos = segs ~/ 60;
+    final segundos = segs % 60;
+    return '${minutos.toString().padLeft(2, '0')}:${segundos.toString().padLeft(2, '0')}';
+  }
+
   @override
   Widget build(BuildContext context) {
     if (equipoId == null) {
@@ -230,60 +237,65 @@ class _EquipoStatsTab extends StatelessWidget {
                       ),
                 ),
                 const SizedBox(height: 8),
-                Wrap(
-                  spacing: 16,
-                  runSpacing: 8,
-                  children: [
-                    _ResumenChip(
-                        label: 'Lanzamientos',
-                        value: resumen.lanzamientos.toString()),
-                    _ResumenChip(
-                        label: 'Goles', value: resumen.goles.toString()),
-                    _ResumenChip(
-                      label: 'Acierto',
-                      value:
-                          '${(resumen.porcentajeAcierto * 100).toStringAsFixed(1)}%',
-                    ),
-                    _ResumenChip(
-                      label: '7m',
-                      value: '${resumen.goles7m}/${resumen.lanzamientos7m}',
-                    ),
-                    _ResumenChip(
-                        label: 'Perdidas',
-                        value: resumen.perdidas.toString()),
-                    _ResumenChip(
-                        label: 'Recup.',
-                        value: resumen.recuperaciones.toString()),
-                    _ResumenChip(
-                        label: "2'", value: resumen.suspensiones2Min.toString()),
-                    _ResumenChip(
-                        label: 'Amarillas',
-                        value: resumen.tarjetasAmarillas.toString()),
-                    _ResumenChip(
-                        label: 'Rojas',
-                        value: resumen.tarjetasRojas.toString()),
-                  ],
-                ),
-              ],
+                  Wrap(
+                    spacing: 16,
+                    runSpacing: 8,
+                    children: [
+                      _ResumenChip(
+                          label: 'Lanzamientos',
+                          value: resumen.lanzamientosTotales.toString()),
+                      _ResumenChip(
+                          label: 'Goles',
+                          value: resumen.golesTotales.toString()),
+                      _ResumenChip(
+                        label: 'Acierto',
+                        value:
+                            '${(resumen.porcentajeAcierto * 100).toStringAsFixed(1)}%',
+                      ),
+                      _ResumenChip(
+                        label: '7m',
+                        value: '${resumen.goles7m}/${resumen.lanzamientos7m}',
+                      ),
+                      _ResumenChip(
+                          label: 'Perdidas',
+                          value: resumen.perdidas.toString()),
+                      _ResumenChip(
+                          label: 'Recup.',
+                          value: resumen.recuperaciones.toString()),
+                      _ResumenChip(
+                          label: "2'", value: resumen.exclusiones2m.toString()),
+                      _ResumenChip(
+                          label: 'Amarillas',
+                          value: resumen.amarillas.toString()),
+                      _ResumenChip(
+                          label: 'Rojas',
+                          value: resumen.rojas.toString()),
+                      _ResumenChip(
+                          label: 'Azules', value: resumen.azules.toString()),
+                    ],
+                  ),
+                ],
+              ),
             ),
-          ),
         ),
         ...jugadores.map((p) {
-          final nombre = _EstadisticasBody._nombreJugador(
-            mapaConvocados,
-            p.dorsal,
-          );
+          final nombre = p.nombre ??
+              _EstadisticasBody._nombreJugador(
+                mapaConvocados,
+                p.dorsal,
+              );
           final posicion = _EstadisticasBody._posicionJugador(
             mapaConvocados,
             p.dorsal,
           );
-          final esPortero = _EstadisticasBody._esPortero(
-            mapaConvocados,
-            p.dorsal,
-          );
-          final acierto = p.lanzamientos == 0
+          final esPortero = p.esPortero ||
+              _EstadisticasBody._esPortero(
+                mapaConvocados,
+                p.dorsal,
+              );
+          final acierto = p.lanzamientosTotales == 0
               ? '0.0%'
-              : '${(p.porcentajeAcierto * 100).toStringAsFixed(1)}%';
+              : '${(p.golesTotales * 100 / p.lanzamientosTotales).toStringAsFixed(1)}%';
 
           return Card(
             margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
@@ -330,48 +342,89 @@ class _EquipoStatsTab extends StatelessWidget {
                             ),
                           ),
                         const SizedBox(height: 4),
-                        Wrap(
-                          spacing: 8,
-                          runSpacing: 4,
-                          children: [
-                            _MiniStat(
-                              label: 'G/L',
-                              value:
-                                  '${p.goles}/${p.lanzamientos} ($acierto)',
-                            ),
-                            _MiniStat(
-                              label: '7m',
-                              value: '${p.goles7m}/${p.lanzamientos7m}',
-                            ),
-                            _MiniStat(
-                              label: 'Perd',
-                              value: p.perdidas.toString(),
-                            ),
-                            _MiniStat(
-                              label: 'Rec',
-                              value: p.recuperaciones.toString(),
-                            ),
-                            if (esPortero)
-                              _MiniStat(
-                                label: 'Paradas',
+                        SingleChildScrollView(
+                          scrollDirection: Axis.horizontal,
+                          child: Row(
+                            children: [
+                              _StatChip(
+                                label: 'TJ',
+                                value: _formatearTiempo(p.segsJugados),
+                              ),
+                              _StatChip(
+                                label: 'G/L',
                                 value:
-                                    '${p.paradas}/${p.lanzamientosRecibidos}',
+                                    '${p.golesTotales}/${p.lanzamientosTotales} ($acierto)',
                               ),
-                            _MiniStat(
-                              label: "2'",
-                              value: p.suspensiones2Min.toString(),
-                            ),
-                            if (p.tarjetasAmarillas > 0)
-                              _MiniStat(
-                                label: 'Amarillas',
-                                value: p.tarjetasAmarillas.toString(),
+                              _StatChip(
+                                label: '6m',
+                                value:
+                                    '${p.goles6m}/${p.lanzamientos6m}',
                               ),
-                            if (p.tarjetasRojas > 0)
-                              _MiniStat(
-                                label: 'Rojas',
-                                value: p.tarjetasRojas.toString(),
+                              _StatChip(
+                                label: '8m',
+                                value:
+                                    '${p.goles8m}/${p.lanzamientos8m}',
                               ),
-                          ],
+                              _StatChip(
+                                label: '9m',
+                                value:
+                                    '${p.goles9m}/${p.lanzamientos9m}',
+                              ),
+                              _StatChip(
+                                label: '7m',
+                                value:
+                                    '${p.goles7m}/${p.lanzamientos7m}',
+                              ),
+                              _StatChip(
+                                label: 'Perd',
+                                value: '${p.perdidas}',
+                              ),
+                              _StatChip(
+                                label: 'Rec',
+                                value: '${p.recuperaciones}',
+                              ),
+                              _StatChip(
+                                label: 'Golpe',
+                                value: '${p.golpesCometidos}',
+                              ),
+                              _StatChip(
+                                label: 'Prov.G',
+                                value: '${p.golpesProvocados}',
+                              ),
+                              _StatChip(
+                                label: "2'",
+                                value: '${p.exclusiones2m}',
+                              ),
+                              _StatChip(
+                                label: '🟨',
+                                value: '${p.amarillas}',
+                              ),
+                              _StatChip(
+                                label: '🟥',
+                                value: '${p.rojas}',
+                              ),
+                              _StatChip(
+                                label: '🟦',
+                                value: '${p.azules}',
+                              ),
+                              if (esPortero) ...[
+                                _StatChip(
+                                  label: 'Par',
+                                  value: '${p.paradas}',
+                                ),
+                                _StatChip(
+                                  label: 'Enc',
+                                  value: '${p.golesEncajados}',
+                                ),
+                                _StatChip(
+                                  label: '%Par',
+                                  value: p.lanzamientosRecibidos > 0
+                                      ? '${(p.paradas * 100 / p.lanzamientosRecibidos).toStringAsFixed(1)}%'
+                                      : '0%',
+                                ),
+                              ],
+                            ],
+                          ),
                         ),
                       ],
                     ),
@@ -427,11 +480,11 @@ class _ResumenChip extends StatelessWidget {
   }
 }
 
-class _MiniStat extends StatelessWidget {
+class _StatChip extends StatelessWidget {
   final String label;
   final String value;
 
-  const _MiniStat({
+  const _StatChip({
     required this.label,
     required this.value,
   });

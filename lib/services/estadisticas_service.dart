@@ -1,100 +1,181 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 
-class PlayerStats {
-  final String equipoId;
-  final int dorsal;
+enum ZonaTiro { seis, ocho, nueve, siete, otra }
 
-  // ATAQUE
-  int lanzamientos = 0;
-  int goles = 0;
-  int lanzamientos7m = 0;
-  int goles7m = 0;
-  int lanzamientosFallados = 0;
-  int lanzamientosDetenidosPorPortero = 0;
-  int lanzamientosBloqueadosSufridos = 0;
-
-  // PORTERO / DEFENSA
-  int lanzamientosRecibidos = 0;
-  int golesEncajados = 0;
-  int paradas = 0;
-  int bloqueosHechos = 0;
-  int perdidas = 0;
-  int recuperaciones = 0;
-
-  // FALTAS / SANCIONES (estadísticas, no el SancionEstado de partido_en_juego)
-  int faltasCometidas = 0;
-  int faltasRecibidas = 0;
-
-  int suspensiones2Min = 0;
-  int tarjetasAmarillas = 0;
-  int tarjetasRojas = 0;
-  int tarjetasAzules = 0;
-
-  PlayerStats({
-    required this.equipoId,
-    required this.dorsal,
-  });
-
-  double get porcentajeAcierto {
-    if (lanzamientos == 0) return 0;
-    return goles / lanzamientos;
+ZonaTiro clasificarZona(String? zonaCampo) {
+  switch (zonaCampo) {
+    case '7M':
+      return ZonaTiro.siete;
+    case 'E6D':
+    case 'L6D':
+    case 'C6C':
+    case 'L6I':
+    case 'E6I':
+      return ZonaTiro.seis;
+    case 'L8D':
+    case 'C8C':
+    case 'L8I':
+      return ZonaTiro.ocho;
+    case 'L9D':
+    case 'C9C':
+    case 'L9I':
+      return ZonaTiro.nueve;
+    default:
+      return ZonaTiro.otra;
   }
 }
 
+class StatsJugador {
+  final String equipoId;
+  final int dorsal;
+  String? nombre;
+  bool esPortero;
+
+  int segsJugados = 0;
+
+  // Tiro general
+  int lanzamientosTotales = 0;
+  int golesTotales = 0;
+
+  // Por zona
+  int lanzamientos6m = 0;
+  int goles6m = 0;
+  int lanzamientos8m = 0;
+  int goles8m = 0;
+  int lanzamientos9m = 0;
+  int goles9m = 0;
+  int lanzamientos7m = 0;
+  int goles7m = 0;
+
+  // Pérdidas / recuperaciones
+  int perdidas = 0;
+  int recuperaciones = 0;
+
+  // Faltas y disciplina
+  int golpesCometidos = 0;
+  int golpesProvocados = 0;
+  int exclusiones2m = 0;
+  int amarillas = 0;
+  int rojas = 0;
+  int azules = 0;
+
+  // Porteros
+  int paradas = 0;
+  int golesEncajados = 0;
+  int lanzamientosRecibidos = 0;
+
+  StatsJugador({
+    required this.equipoId,
+    required this.dorsal,
+    this.nombre,
+    this.esPortero = false,
+  });
+}
+
+class ResumenEquipo {
+  int lanzamientosTotales = 0;
+  int golesTotales = 0;
+  int lanzamientos7m = 0;
+  int goles7m = 0;
+  int perdidas = 0;
+  int recuperaciones = 0;
+  int exclusiones2m = 0;
+  int amarillas = 0;
+  int rojas = 0;
+  int azules = 0;
+
+  double get porcentajeAcierto =>
+      lanzamientosTotales == 0 ? 0 : golesTotales / lanzamientosTotales;
+}
+
 class PartidoStats {
-  /// clave: '$equipoId#$dorsal'
-  final Map<String, PlayerStats> porJugador;
+  final Map<String, StatsJugador> porJugador;
 
   PartidoStats(this.porJugador);
 
-  PlayerStats getOrCreatePlayer(String equipoId, int dorsal) {
+  StatsJugador obtenerStatsJugador(String equipoId, int dorsal) {
     final key = _playerKey(equipoId, dorsal);
-    return porJugador.putIfAbsent(key, () => PlayerStats(equipoId: equipoId, dorsal: dorsal));
+    return porJugador.putIfAbsent(
+      key,
+      () => StatsJugador(
+        equipoId: equipoId,
+        dorsal: dorsal,
+      ),
+    );
   }
 
   static String _playerKey(String equipoId, int dorsal) => '$equipoId#$dorsal';
 
-  /// Devuelve todos los jugadores de un equipo concreto.
-  Iterable<PlayerStats> jugadoresDeEquipo(String equipoId) {
+  Iterable<StatsJugador> jugadoresDeEquipo(String equipoId) {
     return porJugador.values.where((p) => p.equipoId == equipoId);
   }
 
-  /// Suma simple de estadísticas por equipo (para resúmenes).
-  PlayerStats resumenEquipo(String equipoId) {
-    final resumen = PlayerStats(equipoId: equipoId, dorsal: -1);
+  ResumenEquipo resumenEquipo(String equipoId) {
+    final resumen = ResumenEquipo();
     for (final p in jugadoresDeEquipo(equipoId)) {
-      resumen.lanzamientos += p.lanzamientos;
-      resumen.goles += p.goles;
+      resumen.lanzamientosTotales += p.lanzamientosTotales;
+      resumen.golesTotales += p.golesTotales;
       resumen.lanzamientos7m += p.lanzamientos7m;
       resumen.goles7m += p.goles7m;
-      resumen.lanzamientosFallados += p.lanzamientosFallados;
-      resumen.lanzamientosDetenidosPorPortero += p.lanzamientosDetenidosPorPortero;
-      resumen.lanzamientosBloqueadosSufridos += p.lanzamientosBloqueadosSufridos;
-      resumen.lanzamientosRecibidos += p.lanzamientosRecibidos;
-      resumen.golesEncajados += p.golesEncajados;
-      resumen.paradas += p.paradas;
-      resumen.bloqueosHechos += p.bloqueosHechos;
       resumen.perdidas += p.perdidas;
       resumen.recuperaciones += p.recuperaciones;
-      resumen.faltasCometidas += p.faltasCometidas;
-      resumen.faltasRecibidas += p.faltasRecibidas;
-      resumen.suspensiones2Min += p.suspensiones2Min;
-      resumen.tarjetasAmarillas += p.tarjetasAmarillas;
-      resumen.tarjetasRojas += p.tarjetasRojas;
-      resumen.tarjetasAzules += p.tarjetasAzules;
+      resumen.exclusiones2m += p.exclusiones2m;
+      resumen.amarillas += p.amarillas;
+      resumen.rojas += p.rojas;
+      resumen.azules += p.azules;
     }
     return resumen;
   }
 }
 
 PartidoStats calcularEstadisticasPartidoDesdeSnapshots({
+  required Map<String, dynamic> partidoData,
   required QuerySnapshot<Map<String, dynamic>> datosSnapshot,
   required QuerySnapshot<Map<String, dynamic>> sancionesSnapshot,
 }) {
-  final mapa = <String, PlayerStats>{};
+  final mapa = <String, StatsJugador>{};
   final stats = PartidoStats(mapa);
 
-  // 1) Procesar DATOS (acciones)
+  final equipoLocalId = partidoData['equipoLocalId'] as String?;
+  final equipoVisitanteId = partidoData['equipoVisitanteId'] as String?;
+
+  Map<int, Map<String, dynamic>> _mapearConvocados(List<dynamic>? lista) {
+    final mapaConvocados = <int, Map<String, dynamic>>{};
+    for (final raw in lista ?? []) {
+      if (raw is Map<String, dynamic>) {
+        final dorsal = (raw['dorsal'] as num?)?.toInt();
+        if (dorsal != null) {
+          mapaConvocados[dorsal] = raw;
+        }
+      }
+    }
+    return mapaConvocados;
+  }
+
+  final convocadosPorEquipo = <String, Map<int, Map<String, dynamic>>>{};
+  if (equipoLocalId != null) {
+    convocadosPorEquipo[equipoLocalId] =
+        _mapearConvocados(partidoData['convocadosLocal'] as List<dynamic>?);
+  }
+  if (equipoVisitanteId != null) {
+    convocadosPorEquipo[equipoVisitanteId] =
+        _mapearConvocados(partidoData['convocadosVisitante'] as List<dynamic>?);
+  }
+
+  StatsJugador obtenerStatsJugador(String equipoId, int dorsal) {
+    final statsJugador = stats.obtenerStatsJugador(equipoId, dorsal);
+    final infoEquipo = convocadosPorEquipo[equipoId];
+    final infoJugador = infoEquipo?[dorsal];
+    if (infoJugador != null) {
+      statsJugador.nombre ??= infoJugador['nombre'] as String?;
+      final posicion = (infoJugador['posicion'] as String?)?.toLowerCase() ?? '';
+      if (posicion.contains('portero')) {
+        statsJugador.esPortero = true;
+      }
+    }
+    return statsJugador;
+  }
+
   for (final doc in datosSnapshot.docs) {
     final data = doc.data();
     final String? equipoPrincipalId = data['equipoPrincipal'] as String?;
@@ -103,140 +184,93 @@ PartidoStats calcularEstadisticasPartidoDesdeSnapshots({
     final int? dorsalSecundario = (data['dorsalSecundario'] as num?)?.toInt();
     final String? accion = data['accion'] as String?;
     final String? zonaCampo = data['zonaCampo'] as String?;
-    // final String? zonaPorteria = data['zonaPorteria'] as String?; // se puede usar en el futuro
+    final zona = clasificarZona(zonaCampo);
 
-    if (equipoPrincipalId == null || dorsalPrincipal == null || accion == null) {
-      continue;
+    StatsJugador? pj;
+    StatsJugador? sj;
+
+    if (equipoPrincipalId != null && dorsalPrincipal != null) {
+      pj = obtenerStatsJugador(equipoPrincipalId, dorsalPrincipal);
     }
-
-    final p = stats.getOrCreatePlayer(equipoPrincipalId, dorsalPrincipal);
-    PlayerStats? s;
     if (equipoSecundarioId != null && dorsalSecundario != null) {
-      s = stats.getOrCreatePlayer(equipoSecundarioId, dorsalSecundario);
+      sj = obtenerStatsJugador(equipoSecundarioId, dorsalSecundario);
     }
 
-    // MATRIZ DE ACCIONES (principal / secundario)
+    if (pj == null || accion == null) continue;
 
-    switch (accion) {
-      /// ATAQUE
-      case 'Gol':
-        // Principal (atacante)
-        p.lanzamientos++;
-        p.goles++;
-        if (zonaCampo == '7M') {
-          p.lanzamientos7m++;
-          p.goles7m++;
+    final bool esLanzamiento =
+        accion == 'Gol' || accion == 'Gol Contra' || accion == 'Fallo' ||
+            accion == 'Parada' || accion == 'Bloqueo';
+
+    if (esLanzamiento) {
+      pj.lanzamientosTotales++;
+
+      void cuentaZona(bool esGol) {
+        switch (zona) {
+          case ZonaTiro.seis:
+            pj!.lanzamientos6m++;
+            if (esGol) pj.goles6m++;
+            break;
+          case ZonaTiro.ocho:
+            pj!.lanzamientos8m++;
+            if (esGol) pj.goles8m++;
+            break;
+          case ZonaTiro.nueve:
+            pj!.lanzamientos9m++;
+            if (esGol) pj.goles9m++;
+            break;
+          case ZonaTiro.siete:
+            pj!.lanzamientos7m++;
+            if (esGol) pj.goles7m++;
+            break;
+          default:
+            break;
         }
-        // Secundario (portero rival)
-        if (s != null) {
-          s.lanzamientosRecibidos++;
-          s.golesEncajados++;
-        }
-        break;
+      }
 
-      case 'Gol Contra':
-        // Lo tratamos como gol del principal y gol encajado del portero rival
-        p.lanzamientos++;
-        p.goles++;
-        if (zonaCampo == '7M') {
-          p.lanzamientos7m++;
-          p.goles7m++;
-        }
-        if (s != null) {
-          s.lanzamientosRecibidos++;
-          s.golesEncajados++;
-        }
-        break;
+      if (accion == 'Gol' || accion == 'Gol Contra') {
+        pj.golesTotales++;
+        cuentaZona(true);
+      } else {
+        cuentaZona(false);
+      }
+    }
 
-      case 'Fallo':
-        // Principal
-        p.lanzamientos++;
-        p.lanzamientosFallados++;
-        if (zonaCampo == '7M') {
-          p.lanzamientos7m++;
-        }
-        // Por ahora no tocamos al portero secundario en fallo
-        break;
+    if (sj != null &&
+        (accion == 'Gol' || accion == 'Gol Contra' || accion == 'Parada')) {
+      sj.lanzamientosRecibidos++;
+      if (accion == 'Parada') {
+        sj.paradas++;
+      } else {
+        sj.golesEncajados++;
+      }
+    }
 
-      case 'Parada':
-        // Principal (atacante)
-        p.lanzamientos++;
-        p.lanzamientosDetenidosPorPortero++;
-        if (zonaCampo == '7M') {
-          p.lanzamientos7m++;
-        }
-        // Secundario (portero)
-        if (s != null) {
-          s.lanzamientosRecibidos++;
-          s.paradas++;
-        }
-        break;
+    if (accion == 'Perdida') {
+      pj.perdidas++;
+    } else if (accion == 'Recuperación') {
+      pj.recuperaciones++;
+    }
 
-      case 'Bloqueo':
-        // Principal (atacante que sufre el bloqueo)
-        p.lanzamientos++;
-        p.lanzamientosBloqueadosSufridos++;
-        // Secundario (defensor que bloquea)
-        if (s != null) {
-          s.bloqueosHechos++;
-        }
-        break;
+    if (accion == 'Golpe') {
+      pj.golpesCometidos++;
+      if (sj != null) sj.golpesProvocados++;
+    }
 
-      case 'Perdida':
-        // Principal (atacante que pierde el balón)
-        p.perdidas++;
-        // Secundario (defensor que recupera)
-        if (s != null) {
-          s.recuperaciones++;
-        }
-        break;
-
-      case 'Pasivo':
-        // Lo contamos como pérdida de equipo para el principal
-        p.perdidas++;
-        break;
-
-      case 'Línea':
-        // Pisar área: también lo contamos como pérdida
-        p.perdidas++;
-        break;
-
-      /// DEFENSA (principal = defensor, secundario = atacante que la sufre)
-      case 'Golpe':
-        p.faltasCometidas++;
-        if (s != null) {
-          s.faltasRecibidas++;
-        }
-        break;
-
-      case '2 minutos':
-        p.faltasCometidas++;
-        p.suspensiones2Min++;
-        if (s != null) {
-          s.faltasRecibidas++;
-        }
-        break;
-
-      case 'Tarjeta Amarilla':
-        p.tarjetasAmarillas++;
-        // opcional: s?.faltasRecibidas++;
-        break;
-
-      case 'Tarjeta Roja':
-        p.tarjetasRojas++;
-        break;
-
-      case 'Tarjeta Azul':
-        p.tarjetasAzules++;
-        break;
-
-      default:
-        // Otras acciones que puedan aparecer en el futuro
-        break;
+    if (accion == '2 minutos') {
+      pj.exclusiones2m++;
+    }
+    if (accion == 'Tarjeta Amarilla') {
+      pj.amarillas++;
+    }
+    if (accion == 'Tarjeta Roja') {
+      pj.rojas++;
+    }
+    if (accion == 'Tarjeta Azul') {
+      pj.azules++;
     }
   }
 
-  // 2) Procesar SANCIONES para asegurarnos de que stats y sanciones van alineados
   for (final doc in sancionesSnapshot.docs) {
     final data = doc.data();
     final String? equipoId = data['equipoId'] as String?;
@@ -245,22 +279,32 @@ PartidoStats calcularEstadisticasPartidoDesdeSnapshots({
 
     if (equipoId == null || dorsal == null || tipo == null) continue;
 
-    final p = stats.getOrCreatePlayer(equipoId, dorsal);
+    final p = obtenerStatsJugador(equipoId, dorsal);
 
     switch (tipo) {
       case '2min':
-        p.suspensiones2Min++;
+        p.exclusiones2m++;
         break;
       case 'amarilla':
-        p.tarjetasAmarillas++;
+        p.amarillas++;
         break;
       case 'roja':
-        p.tarjetasRojas++;
+        p.rojas++;
         break;
       case 'azul':
-        p.tarjetasAzules++;
+        p.azules++;
         break;
     }
+  }
+
+  final tiemposJugados = (partidoData['tiemposJugados'] as Map<String, dynamic>?);
+  if (tiemposJugados != null) {
+    tiemposJugados.forEach((key, value) {
+      final statsJugador = mapa[key];
+      if (statsJugador != null) {
+        statsJugador.segsJugados = (value as num).toInt();
+      }
+    });
   }
 
   return stats;

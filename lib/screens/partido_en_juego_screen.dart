@@ -154,6 +154,7 @@ class PartidoEnJuegoScreen extends StatefulWidget {
 
 class _PartidoEnJuegoScreenState extends State<PartidoEnJuegoScreen> {
   final Map<String, SancionEstado> _estadoSanciones = {};
+  final Map<String, int> _tiemposJugadosSegundos = {};
 
   final List<String> _periodos = const [
     '1º Tiempo',
@@ -192,6 +193,7 @@ class _PartidoEnJuegoScreenState extends State<PartidoEnJuegoScreen> {
   bool _sancionesCargadas = false;
 
   String _keySancion(String equipoId, int dorsal) => '$equipoId#$dorsal';
+  String _keyJugador(String equipoId, int dorsal) => '$equipoId#$dorsal';
 
   SancionEstado _getOrCreateSancion(String equipoId, int dorsal) {
     final key = _keySancion(equipoId, dorsal);
@@ -249,6 +251,7 @@ class _PartidoEnJuegoScreenState extends State<PartidoEnJuegoScreen> {
       }
 
       _tickSanciones();
+      _tickTiemposJugados();
     });
 
     setState(() {
@@ -442,6 +445,7 @@ class _PartidoEnJuegoScreenState extends State<PartidoEnJuegoScreen> {
     final updateData = {
       'segundoPartido': _elapsed.inSeconds,
       'periodoActual': _periodoActual,
+      'tiemposJugados': _tiemposJugadosSegundos,
     };
 
     if (_isPlaying) {
@@ -471,6 +475,31 @@ class _PartidoEnJuegoScreenState extends State<PartidoEnJuegoScreen> {
     if (changed && mounted) {
       setState(() {});
     }
+  }
+
+  void _tickTiemposJugados() {
+    void procesarLista(List<Map<String, dynamic>> jugadores, String? equipoId) {
+      if (equipoId == null) return;
+
+      for (final jugador in jugadores) {
+        final dorsal = (jugador['dorsal'] as num?)?.toInt();
+        if (dorsal == null) continue;
+
+        final estado = _getSancion(equipoId, dorsal);
+        final expulsado = estado?.expulsado ?? false;
+        final conDosMin = estado?.tieneDosMinActiva ?? false;
+
+        if (expulsado || conDosMin) {
+          continue;
+        }
+
+        final key = _keyJugador(equipoId, dorsal);
+        _tiemposJugadosSegundos[key] = (_tiemposJugadosSegundos[key] ?? 0) + 1;
+      }
+    }
+
+    procesarLista(_jugadoresLocal, _equipoIdDesdeClave('local'));
+    procesarLista(_jugadoresVisitante, _equipoIdDesdeClave('visitante'));
   }
 
   Future<void> _finalizarPartido() async {
@@ -774,6 +803,15 @@ class _PartidoEnJuegoScreenState extends State<PartidoEnJuegoScreen> {
       if (extra > 0) {
         totalSegundos += extra;
       }
+    }
+
+    final tiemposJugadosRaw = data['tiemposJugados'];
+    if (tiemposJugadosRaw is Map<String, dynamic>) {
+      _tiemposJugadosSegundos
+        ..clear()
+        ..addEntries(tiemposJugadosRaw.entries.map(
+          (e) => MapEntry(e.key, (e.value as num?)?.toInt() ?? 0),
+        ));
     }
 
     int maxSegundos;
