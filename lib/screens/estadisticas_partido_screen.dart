@@ -3,6 +3,25 @@ import 'package:flutter/material.dart';
 
 import '../services/estadisticas_service.dart';
 
+List<Map<String, dynamic>> _convocadosOrdenados(
+  Map<String, dynamic> data, {
+  required bool esLocal,
+}) {
+  final key = esLocal ? 'convocadosLocal' : 'convocadosVisitante';
+  final lista = (data[key] as List<dynamic>? ?? [])
+      .whereType<Map<String, dynamic>>()
+      .map((e) => Map<String, dynamic>.from(e))
+      .toList();
+
+  lista.sort((a, b) {
+    final da = (a['dorsal'] as num?)?.toInt() ?? 0;
+    final db = (b['dorsal'] as num?)?.toInt() ?? 0;
+    return da.compareTo(db);
+  });
+
+  return lista;
+}
+
 class EstadisticasPartidoScreen extends StatelessWidget {
   final String partidoId;
 
@@ -89,13 +108,14 @@ class _EstadisticasBody extends StatelessWidget {
         final equipoVisitanteNombre =
             (data['equipoVisitanteNombre'] as String?) ?? 'Equipo visitante';
 
-        final convocadosLocal = (data['convocadosLocal'] as List<dynamic>? ?? [])
-            .map((e) => Map<String, dynamic>.from(e as Map<String, dynamic>))
-            .toList();
-        final convocadosVisitante =
-            (data['convocadosVisitante'] as List<dynamic>? ?? [])
-                .map((e) => Map<String, dynamic>.from(e as Map<String, dynamic>))
-                .toList();
+        final tiemposJugadosRaw =
+            data['tiemposJugados'] as Map<String, dynamic>? ?? {};
+        final Map<String, int> tiemposJugados = tiemposJugadosRaw.map(
+          (key, value) => MapEntry(key, (value as num).toInt()),
+        );
+
+        final convocadosLocal = _convocadosOrdenados(data, esLocal: true);
+        final convocadosVisitante = _convocadosOrdenados(data, esLocal: false);
 
         final mapaLocalPorDorsal =
             _mapearConvocadosPorDorsal(convocadosLocal);
@@ -164,12 +184,16 @@ class _EstadisticasBody extends StatelessWidget {
                               nombreEquipo: equipoLocalNombre,
                               stats: stats,
                               mapaConvocados: mapaLocalPorDorsal,
+                              convocados: convocadosLocal,
+                              tiemposJugados: tiemposJugados,
                             ),
                             _EquipoStatsTab(
                               equipoId: equipoVisitanteId,
                               nombreEquipo: equipoVisitanteNombre,
                               stats: stats,
                               mapaConvocados: mapaVisitantePorDorsal,
+                              convocados: convocadosVisitante,
+                              tiemposJugados: tiemposJugados,
                             ),
                           ],
                         ),
@@ -191,6 +215,8 @@ class _EquipoStatsTab extends StatelessWidget {
   final String nombreEquipo;
   final PartidoStats stats;
   final Map<int, Map<String, dynamic>> mapaConvocados;
+  final List<Map<String, dynamic>> convocados;
+  final Map<String, int> tiemposJugados;
 
   const _EquipoStatsTab({
     Key? key,
@@ -198,12 +224,14 @@ class _EquipoStatsTab extends StatelessWidget {
     required this.nombreEquipo,
     required this.stats,
     required this.mapaConvocados,
+    required this.convocados,
+    required this.tiemposJugados,
   }) : super(key: key);
 
-  String _formatearTiempo(int segs) {
-    final minutos = segs ~/ 60;
-    final segundos = segs % 60;
-    return '${minutos.toString().padLeft(2, '0')}:${segundos.toString().padLeft(2, '0')}';
+  String formatTiempo(int seconds) {
+    final m = seconds ~/ 60;
+    final s = seconds % 60;
+    return '${m.toString().padLeft(2, '0')}:${s.toString().padLeft(2, '0')}';
   }
 
   @override
@@ -212,13 +240,45 @@ class _EquipoStatsTab extends StatelessWidget {
       return const Center(child: Text('Sin datos de equipo.'));
     }
 
-    final jugadores = stats.jugadoresDeEquipo(equipoId!).toList()
-      ..sort((a, b) => a.dorsal.compareTo(b.dorsal));
+    final statsPorDorsal = {
+      for (final p in stats.jugadoresDeEquipo(equipoId!)) p.dorsal: p,
+    };
+
+    final jugadores = <StatsJugador>[];
+    final dorsalesAgregados = <int>{};
+
+    for (final jugador in convocados) {
+      final dorsal = (jugador['dorsal'] as num?)?.toInt();
+      if (dorsal == null) continue;
+      final statsJugador =
+          statsPorDorsal[dorsal] ?? StatsJugador(equipoId: equipoId!, dorsal: dorsal);
+
+      statsJugador.nombre ??= jugador['nombre'] as String?;
+      final posicionConv = (jugador['posicion'] as String?) ?? '';
+      if (posicionConv.toLowerCase().contains('portero')) {
+        statsJugador.esPortero = true;
+      }
+
+      final keyTiempo = '$equipoId#$dorsal';
+      statsJugador.segsJugados = tiemposJugados[keyTiempo] ?? statsJugador.segsJugados;
+
+      jugadores.add(statsJugador);
+      dorsalesAgregados.add(dorsal);
+    }
+
+    for (final p in statsPorDorsal.values) {
+      if (dorsalesAgregados.contains(p.dorsal)) continue;
+      final keyTiempo = '$equipoId#${p.dorsal}';
+      p.segsJugados = tiemposJugados[keyTiempo] ?? p.segsJugados;
+      jugadores.add(p);
+    }
+
+    jugadores.sort((a, b) => a.dorsal.compareTo(b.dorsal));
 
     final resumen = stats.resumenEquipo(equipoId!);
 
     if (jugadores.isEmpty) {
-      return const Center(child: Text('Sin acciones registradas todavía.'));
+      return const Center(child: Text('Sin convocados disponibles.'));
     }
 
     return ListView(
@@ -237,46 +297,45 @@ class _EquipoStatsTab extends StatelessWidget {
                       ),
                 ),
                 const SizedBox(height: 8),
-                  Wrap(
-                    spacing: 16,
-                    runSpacing: 8,
-                    children: [
-                      _ResumenChip(
-                          label: 'Lanzamientos',
-                          value: resumen.lanzamientosTotales.toString()),
-                      _ResumenChip(
-                          label: 'Goles',
-                          value: resumen.golesTotales.toString()),
-                      _ResumenChip(
-                        label: 'Acierto',
-                        value:
-                            '${(resumen.porcentajeAcierto * 100).toStringAsFixed(1)}%',
-                      ),
-                      _ResumenChip(
-                        label: '7m',
-                        value: '${resumen.goles7m}/${resumen.lanzamientos7m}',
-                      ),
-                      _ResumenChip(
-                          label: 'Perdidas',
-                          value: resumen.perdidas.toString()),
-                      _ResumenChip(
-                          label: 'Recup.',
-                          value: resumen.recuperaciones.toString()),
-                      _ResumenChip(
-                          label: "2'", value: resumen.exclusiones2m.toString()),
-                      _ResumenChip(
-                          label: 'Amarillas',
-                          value: resumen.amarillas.toString()),
-                      _ResumenChip(
-                          label: 'Rojas',
-                          value: resumen.rojas.toString()),
-                      _ResumenChip(
-                          label: 'Azules', value: resumen.azules.toString()),
-                    ],
-                  ),
-                ],
-              ),
+                Wrap(
+                  spacing: 16,
+                  runSpacing: 8,
+                  children: [
+                    _ResumenChip(
+                        label: 'Lanzamientos',
+                        value: resumen.lanzamientosTotales.toString()),
+                    _ResumenChip(
+                        label: 'Goles',
+                        value: resumen.golesTotales.toString()),
+                    _ResumenChip(
+                      label: 'Acierto',
+                      value:
+                          '${(resumen.porcentajeAcierto * 100).toStringAsFixed(1)}%',
+                    ),
+                    _ResumenChip(
+                      label: '7m',
+                      value: '${resumen.goles7m}/${resumen.lanzamientos7m}',
+                    ),
+                    _ResumenChip(
+                        label: 'Perdidas',
+                        value: resumen.perdidas.toString()),
+                    _ResumenChip(
+                        label: 'Recup.',
+                        value: resumen.recuperaciones.toString()),
+                    _ResumenChip(
+                        label: "2'", value: resumen.exclusiones2m.toString()),
+                    _ResumenChip(
+                        label: 'Amarillas',
+                        value: resumen.amarillas.toString()),
+                    _ResumenChip(
+                        label: 'Rojas', value: resumen.rojas.toString()),
+                    _ResumenChip(
+                        label: 'Azules', value: resumen.azules.toString()),
+                  ],
+                ),
+              ],
             ),
+          ),
         ),
         ...jugadores.map((p) {
           final nombre = p.nombre ??
@@ -293,6 +352,8 @@ class _EquipoStatsTab extends StatelessWidget {
                 mapaConvocados,
                 p.dorsal,
               );
+          final String keyTiempo = '$equipoId#${p.dorsal}';
+          final int segundosJugados = tiemposJugados[keyTiempo] ?? 0;
           final acierto = p.lanzamientosTotales == 0
               ? '0.0%'
               : '${(p.golesTotales * 100 / p.lanzamientosTotales).toStringAsFixed(1)}%';
@@ -347,8 +408,8 @@ class _EquipoStatsTab extends StatelessWidget {
                           child: Row(
                             children: [
                               _StatChip(
-                                label: 'TJ',
-                                value: _formatearTiempo(p.segsJugados),
+                                label: 'Tiempo',
+                                value: formatTiempo(segundosJugados),
                               ),
                               _StatChip(
                                 label: 'G/L',

@@ -154,7 +154,7 @@ class PartidoEnJuegoScreen extends StatefulWidget {
 
 class _PartidoEnJuegoScreenState extends State<PartidoEnJuegoScreen> {
   final Map<String, SancionEstado> _estadoSanciones = {};
-  final Map<String, int> _tiemposJugadosSegundos = {};
+  Map<String, int> _tiemposJugados = {};
 
   final List<String> _periodos = const [
     '1º Tiempo',
@@ -445,7 +445,7 @@ class _PartidoEnJuegoScreenState extends State<PartidoEnJuegoScreen> {
     final updateData = {
       'segundoPartido': _elapsed.inSeconds,
       'periodoActual': _periodoActual,
-      'tiemposJugados': _tiemposJugadosSegundos,
+      'tiemposJugados': _tiemposJugados,
     };
 
     if (_isPlaying) {
@@ -494,7 +494,7 @@ class _PartidoEnJuegoScreenState extends State<PartidoEnJuegoScreen> {
         }
 
         final key = _keyJugador(equipoId, dorsal);
-        _tiemposJugadosSegundos[key] = (_tiemposJugadosSegundos[key] ?? 0) + 1;
+        _tiemposJugados[key] = (_tiemposJugados[key] ?? 0) + 1;
       }
     }
 
@@ -784,6 +784,38 @@ class _PartidoEnJuegoScreenState extends State<PartidoEnJuegoScreen> {
   int? _getPorteroActualVisitante() =>
       _jugadoresVisitante.isNotEmpty ? (_jugadoresVisitante.first['dorsal'] as num?)?.toInt() : null;
 
+  void _ensureTiemposForConvocados(Partido partido, Map<String, dynamic> data) {
+    final convLocal = (data['convocadosLocal'] as List<dynamic>? ?? [])
+        .whereType<Map<String, dynamic>>()
+        .map((e) => Map<String, dynamic>.from(e))
+        .toList();
+    final convVisitante = (data['convocadosVisitante'] as List<dynamic>? ?? [])
+        .whereType<Map<String, dynamic>>()
+        .map((e) => Map<String, dynamic>.from(e))
+        .toList();
+
+    final Map<String, int> nuevos = Map<String, int>.from(_tiemposJugados);
+
+    void addIfMissing(String? equipoId, List<Map<String, dynamic>> convs) {
+      if (equipoId == null) return;
+      for (final j in convs) {
+        final dorsal = (j['dorsal'] as num?)?.toInt();
+        if (dorsal == null) continue;
+        final key = '$equipoId#$dorsal';
+        nuevos.putIfAbsent(key, () => 0);
+      }
+    }
+
+    addIfMissing(partido.equipoLocalId, convLocal);
+    addIfMissing(partido.equipoVisitanteId, convVisitante);
+
+    if (mounted) {
+      setState(() {
+        _tiemposJugados = nuevos;
+      });
+    }
+  }
+
   Future<void> _syncPartido(Partido partido, Map<String, dynamic> data) async {
     // Calculamos SIEMPRE los jugadores en juego desde convocados
     final jugadoresLocalEnJuego =
@@ -807,7 +839,7 @@ class _PartidoEnJuegoScreenState extends State<PartidoEnJuegoScreen> {
 
     final tiemposJugadosRaw = data['tiemposJugados'];
     if (tiemposJugadosRaw is Map<String, dynamic>) {
-      _tiemposJugadosSegundos
+      _tiemposJugados
         ..clear()
         ..addEntries(tiemposJugadosRaw.entries.map(
           (e) => MapEntry(e.key, (e.value as num?)?.toInt() ?? 0),
@@ -836,6 +868,8 @@ class _PartidoEnJuegoScreenState extends State<PartidoEnJuegoScreen> {
       _elapsed = Duration(seconds: totalSegundos);
       _initialized = true;
     });
+
+    _ensureTiemposForConvocados(partido, data);
 
     if (!_sancionesCargadas) {
       _sancionesCargadas = true;
