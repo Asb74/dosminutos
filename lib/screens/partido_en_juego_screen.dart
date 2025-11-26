@@ -6,6 +6,7 @@ import 'package:wakelock_plus/wakelock_plus.dart';
 
 import '../models/partido.dart';
 import 'cambios_screen.dart';
+import 'estadisticas_partido_screen.dart';
 import '../widgets/sanciones_widgets.dart';
 
 class PorteriaGridSelector extends StatelessWidget {
@@ -985,6 +986,21 @@ class _PartidoEnJuegoScreenState extends State<PartidoEnJuegoScreen> {
     return Scaffold(
       appBar: AppBar(
         title: const Text('Partido en juego'),
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.bar_chart),
+            tooltip: 'Estadísticas',
+            onPressed: () {
+              Navigator.of(context).push(
+                MaterialPageRoute(
+                  builder: (_) => EstadisticasPartidoScreen(
+                    partidoId: widget.partidoId,
+                  ),
+                ),
+              );
+            },
+          ),
+        ],
       ),
       body: StreamBuilder<DocumentSnapshot<Map<String, dynamic>>>(
         stream: FirebaseFirestore.instance
