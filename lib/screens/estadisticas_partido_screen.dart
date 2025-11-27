@@ -36,14 +36,19 @@ class EstadisticasPartidoScreen extends StatefulWidget {
 }
 
 class _EstadisticasPartidoScreenState extends State<EstadisticasPartidoScreen> {
-  final ScrollController _scrollLocal = ScrollController();
-  final ScrollController _scrollVisit = ScrollController();
-  Map<String, dynamic>? _lastData;
+  final ScrollController _scrollLocalVertical = ScrollController();
+  final ScrollController _scrollVisitVertical = ScrollController();
+  final ScrollController _scrollLocalHorizontal = ScrollController();
+  final ScrollController _scrollVisitHorizontal = ScrollController();
+
+  Map<String, dynamic>? _lastPartidoData;
 
   @override
   void dispose() {
-    _scrollLocal.dispose();
-    _scrollVisit.dispose();
+    _scrollLocalVertical.dispose();
+    _scrollVisitVertical.dispose();
+    _scrollLocalHorizontal.dispose();
+    _scrollVisitHorizontal.dispose();
     super.dispose();
   }
 
@@ -71,20 +76,22 @@ class _EstadisticasPartidoScreenState extends State<EstadisticasPartidoScreen> {
 
                   if (partidoSnapshot.hasData &&
                       partidoSnapshot.data!.data() != null) {
-                    _lastData = partidoSnapshot.data!.data();
+                    _lastPartidoData = partidoSnapshot.data!.data();
                   }
 
-                  if (_lastData == null) {
+                  if (_lastPartidoData == null) {
                     return const Center(child: CircularProgressIndicator());
                   }
 
-                  final data = _lastData!;
+                  final data = _lastPartidoData!;
 
                   return _EstadisticasBody(
                     partidoId: widget.partidoId,
                     partidoData: data,
-                    scrollLocal: _scrollLocal,
-                    scrollVisit: _scrollVisit,
+                    scrollLocal: _scrollLocalVertical,
+                    scrollVisit: _scrollVisitVertical,
+                    scrollHorizontalLocal: _scrollLocalHorizontal,
+                    scrollHorizontalVisit: _scrollVisitHorizontal,
                   );
                 },
               ),
@@ -101,12 +108,16 @@ class _EstadisticasBody extends StatelessWidget {
   final Map<String, dynamic> partidoData;
   final ScrollController scrollLocal;
   final ScrollController scrollVisit;
+  final ScrollController scrollHorizontalLocal;
+  final ScrollController scrollHorizontalVisit;
 
   const _EstadisticasBody({
     required this.partidoId,
     required this.partidoData,
     required this.scrollLocal,
     required this.scrollVisit,
+    required this.scrollHorizontalLocal,
+    required this.scrollHorizontalVisit,
   });
 
   static Map<int, Map<String, dynamic>> _mapearConvocadosPorDorsal(
@@ -171,77 +182,22 @@ class _EstadisticasBody extends StatelessWidget {
           ],
         ),
         Expanded(
-          child: StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
-            stream: FirebaseFirestore.instance
-                .collection('ActaPartido')
-                .doc(partidoId)
-                .collection('Datos')
-                .orderBy('timestamp')
-                .snapshots(),
-            builder: (context, datosSnapshot) {
-              if (datosSnapshot.connectionState == ConnectionState.waiting) {
-                return const Center(child: CircularProgressIndicator());
-              }
-
-              if (datosSnapshot.hasError) {
-                return Center(child: Text('Error: ${datosSnapshot.error}'));
-              }
-
-              return StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
-                stream: FirebaseFirestore.instance
-                    .collection('ActaPartido')
-                    .doc(partidoId)
-                    .collection('Sanciones')
-                    .orderBy('timestamp')
-                    .snapshots(),
-                builder: (context, sancionesSnapshot) {
-                  if (sancionesSnapshot.connectionState ==
-                      ConnectionState.waiting) {
-                    return const Center(child: CircularProgressIndicator());
-                  }
-
-                  if (sancionesSnapshot.hasError) {
-                    return Center(
-                        child: Text('Error: ${sancionesSnapshot.error}'));
-                  }
-
-                  if (!datosSnapshot.hasData || !sancionesSnapshot.hasData) {
-                    return const Center(child: CircularProgressIndicator());
-                  }
-
-                  final stats = calcularEstadisticasPartidoDesdeSnapshots(
-                    partidoData: data,
-                    datosSnapshot: datosSnapshot.data!,
-                    sancionesSnapshot: sancionesSnapshot.data!,
-                  );
-
-                  return TabBarView(
-                    children: [
-                      _EquipoStatsTab(
-                        equipoId: equipoLocalId,
-                        nombreEquipo: equipoLocalNombre,
-                        stats: stats,
-                        mapaConvocados: mapaLocalPorDorsal,
-                        convocados: convocadosLocal,
-                        tiemposJugados: tiemposJugados,
-                        scrollController: scrollLocal,
-                        esLocal: true,
-                      ),
-                      _EquipoStatsTab(
-                        equipoId: equipoVisitanteId,
-                        nombreEquipo: equipoVisitanteNombre,
-                        stats: stats,
-                        mapaConvocados: mapaVisitantePorDorsal,
-                        convocados: convocadosVisitante,
-                        tiemposJugados: tiemposJugados,
-                        scrollController: scrollVisit,
-                        esLocal: false,
-                      ),
-                    ],
-                  );
-                },
-              );
-            },
+          child: _EstadisticasStreams(
+            partidoId: partidoId,
+            partidoData: data,
+            equipoLocalId: equipoLocalId,
+            equipoVisitanteId: equipoVisitanteId,
+            equipoLocalNombre: equipoLocalNombre,
+            equipoVisitanteNombre: equipoVisitanteNombre,
+            mapaLocalPorDorsal: mapaLocalPorDorsal,
+            mapaVisitantePorDorsal: mapaVisitantePorDorsal,
+            convocadosLocal: convocadosLocal,
+            convocadosVisitante: convocadosVisitante,
+            tiemposJugados: tiemposJugados,
+            scrollLocal: scrollLocal,
+            scrollVisit: scrollVisit,
+            scrollHorizontalLocal: scrollHorizontalLocal,
+            scrollHorizontalVisit: scrollHorizontalVisit,
           ),
         ),
       ],
@@ -249,7 +205,131 @@ class _EstadisticasBody extends StatelessWidget {
   }
 }
 
-class _EquipoStatsTab extends StatelessWidget {
+class _EstadisticasStreams extends StatefulWidget {
+  final String partidoId;
+  final Map<String, dynamic> partidoData;
+  final String? equipoLocalId;
+  final String? equipoVisitanteId;
+  final String equipoLocalNombre;
+  final String equipoVisitanteNombre;
+  final Map<int, Map<String, dynamic>> mapaLocalPorDorsal;
+  final Map<int, Map<String, dynamic>> mapaVisitantePorDorsal;
+  final List<Map<String, dynamic>> convocadosLocal;
+  final List<Map<String, dynamic>> convocadosVisitante;
+  final Map<String, int> tiemposJugados;
+  final ScrollController scrollLocal;
+  final ScrollController scrollVisit;
+  final ScrollController scrollHorizontalLocal;
+  final ScrollController scrollHorizontalVisit;
+
+  const _EstadisticasStreams({
+    required this.partidoId,
+    required this.partidoData,
+    required this.equipoLocalId,
+    required this.equipoVisitanteId,
+    required this.equipoLocalNombre,
+    required this.equipoVisitanteNombre,
+    required this.mapaLocalPorDorsal,
+    required this.mapaVisitantePorDorsal,
+    required this.convocadosLocal,
+    required this.convocadosVisitante,
+    required this.tiemposJugados,
+    required this.scrollLocal,
+    required this.scrollVisit,
+    required this.scrollHorizontalLocal,
+    required this.scrollHorizontalVisit,
+  });
+
+  @override
+  State<_EstadisticasStreams> createState() => _EstadisticasStreamsState();
+}
+
+class _EstadisticasStreamsState extends State<_EstadisticasStreams> {
+  QuerySnapshot<Map<String, dynamic>>? _lastDatosSnapshot;
+  QuerySnapshot<Map<String, dynamic>>? _lastSancionesSnapshot;
+
+  @override
+  Widget build(BuildContext context) {
+    return StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
+      stream: FirebaseFirestore.instance
+          .collection('ActaPartido')
+          .doc(widget.partidoId)
+          .collection('Datos')
+          .orderBy('timestamp')
+          .snapshots(),
+      builder: (context, datosSnapshot) {
+        if (datosSnapshot.hasError) {
+          return Center(child: Text('Error: ${datosSnapshot.error}'));
+        }
+
+        if (datosSnapshot.hasData && datosSnapshot.data != null) {
+          _lastDatosSnapshot = datosSnapshot.data;
+        }
+
+        if (_lastDatosSnapshot == null) {
+          return const Center(child: CircularProgressIndicator());
+        }
+
+        return StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
+          stream: FirebaseFirestore.instance
+              .collection('ActaPartido')
+              .doc(widget.partidoId)
+              .collection('Sanciones')
+              .orderBy('timestamp')
+              .snapshots(),
+          builder: (context, sancionesSnapshot) {
+            if (sancionesSnapshot.hasError) {
+              return Center(child: Text('Error: ${sancionesSnapshot.error}'));
+            }
+
+            if (sancionesSnapshot.hasData && sancionesSnapshot.data != null) {
+              _lastSancionesSnapshot = sancionesSnapshot.data;
+            }
+
+            if (_lastSancionesSnapshot == null) {
+              return const Center(child: CircularProgressIndicator());
+            }
+
+            final stats = calcularEstadisticasPartidoDesdeSnapshots(
+              partidoData: widget.partidoData,
+              datosSnapshot: _lastDatosSnapshot!,
+              sancionesSnapshot: _lastSancionesSnapshot!,
+            );
+
+            return TabBarView(
+              children: [
+                _EquipoStatsTab(
+                  equipoId: widget.equipoLocalId,
+                  nombreEquipo: widget.equipoLocalNombre,
+                  stats: stats,
+                  mapaConvocados: widget.mapaLocalPorDorsal,
+                  convocados: widget.convocadosLocal,
+                  tiemposJugados: widget.tiemposJugados,
+                  scrollController: widget.scrollLocal,
+                  horizontalController: widget.scrollHorizontalLocal,
+                  esLocal: true,
+                ),
+                _EquipoStatsTab(
+                  equipoId: widget.equipoVisitanteId,
+                  nombreEquipo: widget.equipoVisitanteNombre,
+                  stats: stats,
+                  mapaConvocados: widget.mapaVisitantePorDorsal,
+                  convocados: widget.convocadosVisitante,
+                  tiemposJugados: widget.tiemposJugados,
+                  scrollController: widget.scrollVisit,
+                  horizontalController: widget.scrollHorizontalVisit,
+                  esLocal: false,
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
+  }
+}
+
+class _EquipoStatsTab extends StatefulWidget {
   final String? equipoId;
   final String nombreEquipo;
   final PartidoStats stats;
@@ -257,6 +337,7 @@ class _EquipoStatsTab extends StatelessWidget {
   final List<Map<String, dynamic>> convocados;
   final Map<String, int> tiemposJugados;
   final ScrollController scrollController;
+  final ScrollController horizontalController;
   final bool esLocal;
 
   const _EquipoStatsTab({
@@ -268,8 +349,45 @@ class _EquipoStatsTab extends StatelessWidget {
     required this.convocados,
     required this.tiemposJugados,
     required this.scrollController,
+    required this.horizontalController,
     required this.esLocal,
   }) : super(key: key);
+
+  @override
+  State<_EquipoStatsTab> createState() => _EquipoStatsTabState();
+}
+
+class _EquipoStatsTabState extends State<_EquipoStatsTab>
+    with AutomaticKeepAliveClientMixin {
+  final Map<int, ScrollController> _horizontalControllersPorJugador = {};
+
+  @override
+  bool get wantKeepAlive => true;
+
+  ScrollController _horizontalControllerParaJugador(int dorsal) {
+    if (_horizontalControllersPorJugador.containsKey(dorsal)) {
+      return _horizontalControllersPorJugador[dorsal]!;
+    }
+
+    if (_horizontalControllersPorJugador.isEmpty) {
+      _horizontalControllersPorJugador[dorsal] = widget.horizontalController;
+      return widget.horizontalController;
+    }
+
+    final controller = ScrollController();
+    _horizontalControllersPorJugador[dorsal] = controller;
+    return controller;
+  }
+
+  @override
+  void dispose() {
+    for (final controller in _horizontalControllersPorJugador.values) {
+      if (controller != widget.horizontalController) {
+        controller.dispose();
+      }
+    }
+    super.dispose();
+  }
 
   String formatTiempo(int seconds) {
     final m = seconds ~/ 60;
@@ -279,22 +397,25 @@ class _EquipoStatsTab extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    if (equipoId == null) {
+    super.build(context);
+    if (widget.equipoId == null) {
       return const Center(child: Text('Sin datos de equipo.'));
     }
 
     final statsPorDorsal = {
-      for (final p in stats.jugadoresDeEquipo(equipoId!)) p.dorsal: p,
+      for (final p in widget.stats.jugadoresDeEquipo(widget.equipoId!))
+        p.dorsal: p,
     };
 
     final jugadores = <StatsJugador>[];
     final dorsalesAgregados = <int>{};
 
-    for (final jugador in convocados) {
+    for (final jugador in widget.convocados) {
       final dorsal = (jugador['dorsal'] as num?)?.toInt();
       if (dorsal == null) continue;
       final statsJugador =
-          statsPorDorsal[dorsal] ?? StatsJugador(equipoId: equipoId!, dorsal: dorsal);
+          statsPorDorsal[dorsal] ??
+              StatsJugador(equipoId: widget.equipoId!, dorsal: dorsal);
 
       statsJugador.nombre ??= jugador['nombre'] as String?;
       final posicionConv = (jugador['posicion'] as String?) ?? '';
@@ -302,8 +423,9 @@ class _EquipoStatsTab extends StatelessWidget {
         statsJugador.esPortero = true;
       }
 
-      final keyTiempo = '$equipoId#$dorsal';
-      statsJugador.segsJugados = tiemposJugados[keyTiempo] ?? statsJugador.segsJugados;
+      final keyTiempo = '${widget.equipoId}#$dorsal';
+      statsJugador.segsJugados =
+          widget.tiemposJugados[keyTiempo] ?? statsJugador.segsJugados;
 
       jugadores.add(statsJugador);
       dorsalesAgregados.add(dorsal);
@@ -311,14 +433,14 @@ class _EquipoStatsTab extends StatelessWidget {
 
     for (final p in statsPorDorsal.values) {
       if (dorsalesAgregados.contains(p.dorsal)) continue;
-      final keyTiempo = '$equipoId#${p.dorsal}';
-      p.segsJugados = tiemposJugados[keyTiempo] ?? p.segsJugados;
+      final keyTiempo = '${widget.equipoId}#${p.dorsal}';
+      p.segsJugados = widget.tiemposJugados[keyTiempo] ?? p.segsJugados;
       jugadores.add(p);
     }
 
     jugadores.sort((a, b) => a.dorsal.compareTo(b.dorsal));
 
-    final resumen = stats.resumenEquipo(equipoId!);
+    final resumen = widget.stats.resumenEquipo(widget.equipoId!);
 
     if (jugadores.isEmpty) {
       return const Center(child: Text('Sin convocados disponibles.'));
@@ -326,8 +448,8 @@ class _EquipoStatsTab extends StatelessWidget {
 
     return ListView.builder(
       key:
-          PageStorageKey<String>(esLocal ? 'stats_local' : 'stats_visitante'),
-      controller: scrollController,
+          PageStorageKey<String>(widget.esLocal ? 'stats_local' : 'stats_visitante'),
+      controller: widget.scrollController,
       itemCount: jugadores.length + 1,
       itemBuilder: (context, index) {
         if (index == 0) {
@@ -339,7 +461,7 @@ class _EquipoStatsTab extends StatelessWidget {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    'Resumen $nombreEquipo',
+                    'Resumen ${widget.nombreEquipo}',
                     style: Theme.of(context).textTheme.titleMedium?.copyWith(
                           fontWeight: FontWeight.bold,
                         ),
@@ -390,20 +512,20 @@ class _EquipoStatsTab extends StatelessWidget {
         final p = jugadores[index - 1];
         final nombre = p.nombre ??
             _EstadisticasBody._nombreJugador(
-              mapaConvocados,
+              widget.mapaConvocados,
               p.dorsal,
             );
         final posicion = _EstadisticasBody._posicionJugador(
-          mapaConvocados,
+          widget.mapaConvocados,
           p.dorsal,
         );
         final esPortero = p.esPortero ||
             _EstadisticasBody._esPortero(
-              mapaConvocados,
+              widget.mapaConvocados,
               p.dorsal,
             );
-        final String keyTiempo = '$equipoId#${p.dorsal}';
-        final int segundosJugados = tiemposJugados[keyTiempo] ?? 0;
+        final String keyTiempo = '${widget.equipoId}#${p.dorsal}';
+        final int segundosJugados = widget.tiemposJugados[keyTiempo] ?? 0;
         final acierto = p.lanzamientosTotales == 0
             ? '0.0%'
             : '${(p.golesTotales * 100 / p.lanzamientosTotales).toStringAsFixed(1)}%';
@@ -454,7 +576,10 @@ class _EquipoStatsTab extends StatelessWidget {
                         ),
                       const SizedBox(height: 4),
                       SingleChildScrollView(
+                        key: PageStorageKey<String>(
+                            'stats_${widget.esLocal ? 'local' : 'visitante'}_${p.dorsal}'),
                         scrollDirection: Axis.horizontal,
+                        controller: _horizontalControllerParaJugador(p.dorsal),
                         child: Row(
                           children: [
                             _StatChip(
