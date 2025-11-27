@@ -22,7 +22,7 @@ List<Map<String, dynamic>> _convocadosOrdenados(
   return lista;
 }
 
-class EstadisticasPartidoScreen extends StatelessWidget {
+class EstadisticasPartidoScreen extends StatefulWidget {
   final String partidoId;
 
   const EstadisticasPartidoScreen({
@@ -31,21 +31,74 @@ class EstadisticasPartidoScreen extends StatelessWidget {
   }) : super(key: key);
 
   @override
+  State<EstadisticasPartidoScreen> createState() =>
+      _EstadisticasPartidoScreenState();
+}
+
+class _EstadisticasPartidoScreenState extends State<EstadisticasPartidoScreen> {
+  final ScrollController _scrollControllerLocal = ScrollController();
+  final ScrollController _scrollControllerVisitante = ScrollController();
+  Map<String, dynamic>? _ultimaData;
+
+  @override
+  void dispose() {
+    _scrollControllerLocal.dispose();
+    _scrollControllerVisitante.dispose();
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('Estadísticas'),
+    return DefaultTabController(
+      length: 2,
+      child: Scaffold(
+        appBar: AppBar(
+          title: const Text('Estadísticas'),
+        ),
+        body: StreamBuilder<DocumentSnapshot<Map<String, dynamic>>>(
+          stream: FirebaseFirestore.instance
+              .collection('Partidos')
+              .doc(widget.partidoId)
+              .snapshots(),
+          builder: (context, partidoSnapshot) {
+            if (partidoSnapshot.hasError) {
+              return Center(child: Text('Error: ${partidoSnapshot.error}'));
+            }
+
+            if (partidoSnapshot.hasData && partidoSnapshot.data?.data() != null) {
+              _ultimaData = partidoSnapshot.data!.data();
+            }
+
+            if (_ultimaData == null) {
+              return const Center(child: CircularProgressIndicator());
+            }
+
+            final data = _ultimaData!;
+
+            return _EstadisticasBody(
+              partidoId: widget.partidoId,
+              partidoData: data,
+              scrollControllerLocal: _scrollControllerLocal,
+              scrollControllerVisitante: _scrollControllerVisitante,
+            );
+          },
+        ),
       ),
-      body: _EstadisticasBody(partidoId: partidoId),
     );
   }
 }
 
 class _EstadisticasBody extends StatelessWidget {
   final String partidoId;
+  final Map<String, dynamic> partidoData;
+  final ScrollController scrollControllerLocal;
+  final ScrollController scrollControllerVisitante;
 
   const _EstadisticasBody({
     required this.partidoId,
+    required this.partidoData,
+    required this.scrollControllerLocal,
+    required this.scrollControllerVisitante,
   });
 
   static Map<int, Map<String, dynamic>> _mapearConvocadosPorDorsal(
@@ -80,128 +133,106 @@ class _EstadisticasBody extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return StreamBuilder<DocumentSnapshot<Map<String, dynamic>>>(
+    final data = partidoData;
+    final equipoLocalId = data['equipoLocalId'] as String?;
+    final equipoVisitanteId = data['equipoVisitanteId'] as String?;
+    final equipoLocalNombre =
+        (data['equipoLocalNombre'] as String?) ?? 'Equipo local';
+    final equipoVisitanteNombre =
+        (data['equipoVisitanteNombre'] as String?) ?? 'Equipo visitante';
+
+    final tiemposJugadosRaw =
+        data['tiemposJugados'] as Map<String, dynamic>? ?? {};
+    final Map<String, int> tiemposJugados = tiemposJugadosRaw.map(
+      (key, value) => MapEntry(key, (value as num).toInt()),
+    );
+
+    final convocadosLocal = _convocadosOrdenados(data, esLocal: true);
+    final convocadosVisitante = _convocadosOrdenados(data, esLocal: false);
+
+    final mapaLocalPorDorsal = _mapearConvocadosPorDorsal(convocadosLocal);
+    final mapaVisitantePorDorsal =
+        _mapearConvocadosPorDorsal(convocadosVisitante);
+
+    return StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
       stream: FirebaseFirestore.instance
-          .collection('Partidos')
+          .collection('ActaPartido')
           .doc(partidoId)
+          .collection('Datos')
+          .orderBy('timestamp')
           .snapshots(),
-      builder: (context, partidoSnapshot) {
-        if (partidoSnapshot.connectionState == ConnectionState.waiting) {
+      builder: (context, datosSnapshot) {
+        if (datosSnapshot.connectionState == ConnectionState.waiting) {
           return const Center(child: CircularProgressIndicator());
         }
 
-        if (partidoSnapshot.hasError) {
-          return Center(child: Text('Error: ${partidoSnapshot.error}'));
+        if (datosSnapshot.hasError) {
+          return Center(child: Text('Error: ${datosSnapshot.error}'));
         }
-
-        if (!partidoSnapshot.hasData || partidoSnapshot.data?.data() == null) {
-          return const Center(
-            child: Text('No se encontró la información del partido.'),
-          );
-        }
-
-        final data = partidoSnapshot.data!.data()!;
-        final equipoLocalId = data['equipoLocalId'] as String?;
-        final equipoVisitanteId = data['equipoVisitanteId'] as String?;
-        final equipoLocalNombre =
-            (data['equipoLocalNombre'] as String?) ?? 'Equipo local';
-        final equipoVisitanteNombre =
-            (data['equipoVisitanteNombre'] as String?) ?? 'Equipo visitante';
-
-        final tiemposJugadosRaw =
-            data['tiemposJugados'] as Map<String, dynamic>? ?? {};
-        final Map<String, int> tiemposJugados = tiemposJugadosRaw.map(
-          (key, value) => MapEntry(key, (value as num).toInt()),
-        );
-
-        final convocadosLocal = _convocadosOrdenados(data, esLocal: true);
-        final convocadosVisitante = _convocadosOrdenados(data, esLocal: false);
-
-        final mapaLocalPorDorsal =
-            _mapearConvocadosPorDorsal(convocadosLocal);
-        final mapaVisitantePorDorsal =
-            _mapearConvocadosPorDorsal(convocadosVisitante);
 
         return StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
           stream: FirebaseFirestore.instance
               .collection('ActaPartido')
               .doc(partidoId)
-              .collection('Datos')
+              .collection('Sanciones')
               .orderBy('timestamp')
               .snapshots(),
-          builder: (context, datosSnapshot) {
-            if (datosSnapshot.connectionState == ConnectionState.waiting) {
+          builder: (context, sancionesSnapshot) {
+            if (sancionesSnapshot.connectionState == ConnectionState.waiting) {
               return const Center(child: CircularProgressIndicator());
             }
 
-            if (datosSnapshot.hasError) {
-              return Center(child: Text('Error: ${datosSnapshot.error}'));
+            if (sancionesSnapshot.hasError) {
+              return Center(child: Text('Error: ${sancionesSnapshot.error}'));
             }
 
-            return StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
-              stream: FirebaseFirestore.instance
-                  .collection('ActaPartido')
-                  .doc(partidoId)
-                  .collection('Sanciones')
-                  .orderBy('timestamp')
-                  .snapshots(),
-              builder: (context, sancionesSnapshot) {
-                if (sancionesSnapshot.connectionState ==
-                    ConnectionState.waiting) {
-                  return const Center(child: CircularProgressIndicator());
-                }
+            if (!datosSnapshot.hasData || !sancionesSnapshot.hasData) {
+              return const Center(child: CircularProgressIndicator());
+            }
 
-                if (sancionesSnapshot.hasError) {
-                  return Center(
-                      child: Text('Error: ${sancionesSnapshot.error}'));
-                }
+            final stats = calcularEstadisticasPartidoDesdeSnapshots(
+              partidoData: data,
+              datosSnapshot: datosSnapshot.data!,
+              sancionesSnapshot: sancionesSnapshot.data!,
+            );
 
-                if (!datosSnapshot.hasData || !sancionesSnapshot.hasData) {
-                  return const Center(child: CircularProgressIndicator());
-                }
-
-                final stats = calcularEstadisticasPartidoDesdeSnapshots(
-                  partidoData: data,
-                  datosSnapshot: datosSnapshot.data!,
-                  sancionesSnapshot: sancionesSnapshot.data!,
-                );
-
-                return DefaultTabController(
-                  length: 2,
-                  child: Column(
+            return Column(
+              children: [
+                TabBar(
+                  tabs: [
+                    Tab(text: equipoLocalNombre),
+                    Tab(text: equipoVisitanteNombre),
+                  ],
+                ),
+                Expanded(
+                  child: TabBarView(
                     children: [
-                      TabBar(
-                        tabs: [
-                          Tab(text: equipoLocalNombre),
-                          Tab(text: equipoVisitanteNombre),
-                        ],
+                      _EquipoStatsTab(
+                        equipoId: equipoLocalId,
+                        nombreEquipo: equipoLocalNombre,
+                        stats: stats,
+                        mapaConvocados: mapaLocalPorDorsal,
+                        convocados: convocadosLocal,
+                        tiemposJugados: tiemposJugados,
+                        scrollController: scrollControllerLocal,
+                        listKey:
+                            const PageStorageKey<String>('estadisticas_lista_local'),
                       ),
-                      Expanded(
-                        child: TabBarView(
-                          children: [
-                            _EquipoStatsTab(
-                              equipoId: equipoLocalId,
-                              nombreEquipo: equipoLocalNombre,
-                              stats: stats,
-                              mapaConvocados: mapaLocalPorDorsal,
-                              convocados: convocadosLocal,
-                              tiemposJugados: tiemposJugados,
-                            ),
-                            _EquipoStatsTab(
-                              equipoId: equipoVisitanteId,
-                              nombreEquipo: equipoVisitanteNombre,
-                              stats: stats,
-                              mapaConvocados: mapaVisitantePorDorsal,
-                              convocados: convocadosVisitante,
-                              tiemposJugados: tiemposJugados,
-                            ),
-                          ],
-                        ),
+                      _EquipoStatsTab(
+                        equipoId: equipoVisitanteId,
+                        nombreEquipo: equipoVisitanteNombre,
+                        stats: stats,
+                        mapaConvocados: mapaVisitantePorDorsal,
+                        convocados: convocadosVisitante,
+                        tiemposJugados: tiemposJugados,
+                        scrollController: scrollControllerVisitante,
+                        listKey: const PageStorageKey<String>(
+                            'estadisticas_lista_visitante'),
                       ),
                     ],
                   ),
-                );
-              },
+                ),
+              ],
             );
           },
         );
@@ -217,6 +248,8 @@ class _EquipoStatsTab extends StatelessWidget {
   final Map<int, Map<String, dynamic>> mapaConvocados;
   final List<Map<String, dynamic>> convocados;
   final Map<String, int> tiemposJugados;
+  final ScrollController scrollController;
+  final Key? listKey;
 
   const _EquipoStatsTab({
     Key? key,
@@ -226,6 +259,8 @@ class _EquipoStatsTab extends StatelessWidget {
     required this.mapaConvocados,
     required this.convocados,
     required this.tiemposJugados,
+    required this.scrollController,
+    this.listKey,
   }) : super(key: key);
 
   String formatTiempo(int seconds) {
@@ -282,6 +317,8 @@ class _EquipoStatsTab extends StatelessWidget {
     }
 
     return ListView(
+      key: listKey ?? const PageStorageKey<String>('estadisticas_lista'),
+      controller: scrollController,
       children: [
         Card(
           margin: const EdgeInsets.all(12),
