@@ -157,6 +157,7 @@ class _PartidoEnJuegoScreenState extends State<PartidoEnJuegoScreen> {
   Map<String, int> _tiemposJugadosCache = {};
   int _ultimoSegundoContabilizado = 0;
   int _tiempoNoPersistido = 0;
+  final ValueNotifier<String> tiempoTexto = ValueNotifier<String>('00:00');
 
   final List<String> _periodos = const [
     '1º Tiempo',
@@ -216,6 +217,7 @@ class _PartidoEnJuegoScreenState extends State<PartidoEnJuegoScreen> {
   @override
   void dispose() {
     _timer?.cancel();
+    tiempoTexto.dispose();
     WakelockPlus.disable();
     super.dispose();
   }
@@ -233,10 +235,9 @@ class _PartidoEnJuegoScreenState extends State<PartidoEnJuegoScreen> {
   void _iniciarTimerLocal() {
     _timer?.cancel();
     _timer = Timer.periodic(const Duration(seconds: 1), (timer) {
-      setState(() {
-        _elapsed += const Duration(seconds: 1);
-        _ticksSincePersist++;
-      });
+      _elapsed += const Duration(seconds: 1);
+      _ticksSincePersist++;
+      tiempoTexto.value = _formatDuration(_elapsed);
 
       final currentSeconds = _elapsed.inSeconds;
       final delta = currentSeconds - _ultimoSegundoContabilizado;
@@ -247,9 +248,8 @@ class _PartidoEnJuegoScreenState extends State<PartidoEnJuegoScreen> {
 
       final maxSegundos = _maxSegundosPeriodo();
       if (_elapsed.inSeconds >= maxSegundos) {
-        setState(() {
-          _elapsed = Duration(seconds: maxSegundos);
-        });
+        _elapsed = Duration(seconds: maxSegundos);
+        tiempoTexto.value = _formatDuration(_elapsed);
         _finalizarPeriodoPorTiempo();
         return;
       }
@@ -351,6 +351,7 @@ class _PartidoEnJuegoScreenState extends State<PartidoEnJuegoScreen> {
     setState(() {
       _elapsed = clamped;
     });
+    tiempoTexto.value = _formatDuration(_elapsed);
     _persistTiempo();
   }
 
@@ -397,6 +398,7 @@ class _PartidoEnJuegoScreenState extends State<PartidoEnJuegoScreen> {
       _elapsed = Duration.zero;
       _ultimoSegundoContabilizado = 0;
     });
+    tiempoTexto.value = _formatDuration(_elapsed);
     await FirebaseFirestore.instance.collection('Partidos').doc(widget.partidoId).update({
       'periodoActual': _periodoActual,
       'segundoPartido': 0,
@@ -893,6 +895,7 @@ class _PartidoEnJuegoScreenState extends State<PartidoEnJuegoScreen> {
       _elapsed = Duration(seconds: totalSegundos);
       _initialized = true;
     });
+    tiempoTexto.value = _formatDuration(_elapsed);
 
     _ensureTiemposForConvocados(partido, data);
 
@@ -1160,7 +1163,7 @@ class _PartidoEnJuegoScreenState extends State<PartidoEnJuegoScreen> {
                   golesLocal: _golesLocal,
                   golesVisitante: _golesVisitante,
                   periodoActual: _periodoActual,
-                  tiempo: _formatDuration(_elapsed),
+                  tiempoListenable: tiempoTexto,
                   isPlaying: _isPlaying,
                   onEditLocal: () => _editarGoles(esLocal: true),
                   onEditVisitante: () => _editarGoles(esLocal: false),
@@ -1331,7 +1334,7 @@ class _MarcadorWidget extends StatelessWidget {
     required this.golesLocal,
     required this.golesVisitante,
     required this.periodoActual,
-    required this.tiempo,
+    required this.tiempoListenable,
     required this.isPlaying,
     required this.onEditLocal,
     required this.onEditVisitante,
@@ -1345,7 +1348,7 @@ class _MarcadorWidget extends StatelessWidget {
   final int golesLocal;
   final int golesVisitante;
   final String periodoActual;
-  final String tiempo;
+  final ValueListenable<String> tiempoListenable;
   final bool isPlaying;
   final VoidCallback onEditLocal;
   final VoidCallback onEditVisitante;
@@ -1430,16 +1433,22 @@ class _MarcadorWidget extends StatelessWidget {
                       color: Colors.black,
                       borderRadius: BorderRadius.circular(6),
                     ),
-                    child: Text(
-                      tiempo,
-                      style: TextStyle(
-                        fontFamily: 'RobotoMono',
-                        fontSize: 18,
-                        fontWeight: FontWeight.bold,
-                        letterSpacing: 1.5,
-                        color:
-                            isPlaying ? Colors.greenAccent : Colors.orangeAccent,
-                      ),
+                    child: ValueListenableBuilder<String>(
+                      valueListenable: tiempoListenable,
+                      builder: (context, tiempo, _) {
+                        return Text(
+                          tiempo,
+                          style: TextStyle(
+                            fontFamily: 'RobotoMono',
+                            fontSize: 18,
+                            fontWeight: FontWeight.bold,
+                            letterSpacing: 1.5,
+                            color: isPlaying
+                                ? Colors.greenAccent
+                                : Colors.orangeAccent,
+                          ),
+                        );
+                      },
                     ),
                   ),
                 ),
