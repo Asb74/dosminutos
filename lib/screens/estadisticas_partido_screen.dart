@@ -36,14 +36,14 @@ class EstadisticasPartidoScreen extends StatefulWidget {
 }
 
 class _EstadisticasPartidoScreenState extends State<EstadisticasPartidoScreen> {
-  final ScrollController _scrollControllerLocal = ScrollController();
-  final ScrollController _scrollControllerVisitante = ScrollController();
-  Map<String, dynamic>? _ultimaData;
+  final ScrollController _scrollLocal = ScrollController();
+  final ScrollController _scrollVisit = ScrollController();
+  Map<String, dynamic>? _lastData;
 
   @override
   void dispose() {
-    _scrollControllerLocal.dispose();
-    _scrollControllerVisitante.dispose();
+    _scrollLocal.dispose();
+    _scrollVisit.dispose();
     super.dispose();
   }
 
@@ -70,21 +70,21 @@ class _EstadisticasPartidoScreenState extends State<EstadisticasPartidoScreen> {
                   }
 
                   if (partidoSnapshot.hasData &&
-                      partidoSnapshot.data?.data() != null) {
-                    _ultimaData = partidoSnapshot.data!.data();
+                      partidoSnapshot.data!.data() != null) {
+                    _lastData = partidoSnapshot.data!.data();
                   }
 
-                  if (_ultimaData == null) {
+                  if (_lastData == null) {
                     return const Center(child: CircularProgressIndicator());
                   }
 
-                  final data = _ultimaData!;
+                  final data = _lastData!;
 
                   return _EstadisticasBody(
                     partidoId: widget.partidoId,
                     partidoData: data,
-                    scrollControllerLocal: _scrollControllerLocal,
-                    scrollControllerVisitante: _scrollControllerVisitante,
+                    scrollLocal: _scrollLocal,
+                    scrollVisit: _scrollVisit,
                   );
                 },
               ),
@@ -99,14 +99,14 @@ class _EstadisticasPartidoScreenState extends State<EstadisticasPartidoScreen> {
 class _EstadisticasBody extends StatelessWidget {
   final String partidoId;
   final Map<String, dynamic> partidoData;
-  final ScrollController scrollControllerLocal;
-  final ScrollController scrollControllerVisitante;
+  final ScrollController scrollLocal;
+  final ScrollController scrollVisit;
 
   const _EstadisticasBody({
     required this.partidoId,
     required this.partidoData,
-    required this.scrollControllerLocal,
-    required this.scrollControllerVisitante,
+    required this.scrollLocal,
+    required this.scrollVisit,
   });
 
   static Map<int, Map<String, dynamic>> _mapearConvocadosPorDorsal(
@@ -162,58 +162,60 @@ class _EstadisticasBody extends StatelessWidget {
     final mapaVisitantePorDorsal =
         _mapearConvocadosPorDorsal(convocadosVisitante);
 
-    return StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
-      stream: FirebaseFirestore.instance
-          .collection('ActaPartido')
-          .doc(partidoId)
-          .collection('Datos')
-          .orderBy('timestamp')
-          .snapshots(),
-      builder: (context, datosSnapshot) {
-        if (datosSnapshot.connectionState == ConnectionState.waiting) {
-          return const Center(child: CircularProgressIndicator());
-        }
+    return Column(
+      children: [
+        TabBar(
+          tabs: [
+            Tab(text: equipoLocalNombre),
+            Tab(text: equipoVisitanteNombre),
+          ],
+        ),
+        Expanded(
+          child: StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
+            stream: FirebaseFirestore.instance
+                .collection('ActaPartido')
+                .doc(partidoId)
+                .collection('Datos')
+                .orderBy('timestamp')
+                .snapshots(),
+            builder: (context, datosSnapshot) {
+              if (datosSnapshot.connectionState == ConnectionState.waiting) {
+                return const Center(child: CircularProgressIndicator());
+              }
 
-        if (datosSnapshot.hasError) {
-          return Center(child: Text('Error: ${datosSnapshot.error}'));
-        }
+              if (datosSnapshot.hasError) {
+                return Center(child: Text('Error: ${datosSnapshot.error}'));
+              }
 
-        return StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
-          stream: FirebaseFirestore.instance
-              .collection('ActaPartido')
-              .doc(partidoId)
-              .collection('Sanciones')
-              .orderBy('timestamp')
-              .snapshots(),
-          builder: (context, sancionesSnapshot) {
-            if (sancionesSnapshot.connectionState == ConnectionState.waiting) {
-              return const Center(child: CircularProgressIndicator());
-            }
+              return StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
+                stream: FirebaseFirestore.instance
+                    .collection('ActaPartido')
+                    .doc(partidoId)
+                    .collection('Sanciones')
+                    .orderBy('timestamp')
+                    .snapshots(),
+                builder: (context, sancionesSnapshot) {
+                  if (sancionesSnapshot.connectionState ==
+                      ConnectionState.waiting) {
+                    return const Center(child: CircularProgressIndicator());
+                  }
 
-            if (sancionesSnapshot.hasError) {
-              return Center(child: Text('Error: ${sancionesSnapshot.error}'));
-            }
+                  if (sancionesSnapshot.hasError) {
+                    return Center(
+                        child: Text('Error: ${sancionesSnapshot.error}'));
+                  }
 
-            if (!datosSnapshot.hasData || !sancionesSnapshot.hasData) {
-              return const Center(child: CircularProgressIndicator());
-            }
+                  if (!datosSnapshot.hasData || !sancionesSnapshot.hasData) {
+                    return const Center(child: CircularProgressIndicator());
+                  }
 
-            final stats = calcularEstadisticasPartidoDesdeSnapshots(
-              partidoData: data,
-              datosSnapshot: datosSnapshot.data!,
-              sancionesSnapshot: sancionesSnapshot.data!,
-            );
+                  final stats = calcularEstadisticasPartidoDesdeSnapshots(
+                    partidoData: data,
+                    datosSnapshot: datosSnapshot.data!,
+                    sancionesSnapshot: sancionesSnapshot.data!,
+                  );
 
-            return Column(
-              children: [
-                TabBar(
-                  tabs: [
-                    Tab(text: equipoLocalNombre),
-                    Tab(text: equipoVisitanteNombre),
-                  ],
-                ),
-                Expanded(
-                  child: TabBarView(
+                  return TabBarView(
                     children: [
                       _EquipoStatsTab(
                         equipoId: equipoLocalId,
@@ -222,9 +224,8 @@ class _EstadisticasBody extends StatelessWidget {
                         mapaConvocados: mapaLocalPorDorsal,
                         convocados: convocadosLocal,
                         tiemposJugados: tiemposJugados,
-                        scrollController: scrollControllerLocal,
-                        listKey:
-                            const PageStorageKey<String>('estadisticas_lista_local'),
+                        scrollController: scrollLocal,
+                        esLocal: true,
                       ),
                       _EquipoStatsTab(
                         equipoId: equipoVisitanteId,
@@ -233,18 +234,17 @@ class _EstadisticasBody extends StatelessWidget {
                         mapaConvocados: mapaVisitantePorDorsal,
                         convocados: convocadosVisitante,
                         tiemposJugados: tiemposJugados,
-                        scrollController: scrollControllerVisitante,
-                        listKey: const PageStorageKey<String>(
-                            'estadisticas_lista_visitante'),
+                        scrollController: scrollVisit,
+                        esLocal: false,
                       ),
                     ],
-                  ),
-                ),
-              ],
-            );
-          },
-        );
-      },
+                  );
+                },
+              );
+            },
+          ),
+        ),
+      ],
     );
   }
 }
@@ -257,7 +257,7 @@ class _EquipoStatsTab extends StatelessWidget {
   final List<Map<String, dynamic>> convocados;
   final Map<String, int> tiemposJugados;
   final ScrollController scrollController;
-  final Key? listKey;
+  final bool esLocal;
 
   const _EquipoStatsTab({
     Key? key,
@@ -268,7 +268,7 @@ class _EquipoStatsTab extends StatelessWidget {
     required this.convocados,
     required this.tiemposJugados,
     required this.scrollController,
-    this.listKey,
+    required this.esLocal,
   }) : super(key: key);
 
   String formatTiempo(int seconds) {
@@ -324,223 +324,223 @@ class _EquipoStatsTab extends StatelessWidget {
       return const Center(child: Text('Sin convocados disponibles.'));
     }
 
-    return ListView(
-      key: listKey ?? const PageStorageKey<String>('estadisticas_lista'),
+    return ListView.builder(
+      key:
+          PageStorageKey<String>(esLocal ? 'stats_local' : 'stats_visitante'),
       controller: scrollController,
-      children: [
-        Card(
-          margin: const EdgeInsets.all(12),
-          child: Padding(
-            padding: const EdgeInsets.all(12),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  'Resumen $nombreEquipo',
-                  style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                        fontWeight: FontWeight.bold,
-                      ),
-                ),
-                const SizedBox(height: 8),
-                Wrap(
-                  spacing: 16,
-                  runSpacing: 8,
-                  children: [
-                    _ResumenChip(
-                        label: 'Lanzamientos',
-                        value: resumen.lanzamientosTotales.toString()),
-                    _ResumenChip(
-                        label: 'Goles',
-                        value: resumen.golesTotales.toString()),
-                    _ResumenChip(
-                      label: 'Acierto',
-                      value:
-                          '${(resumen.porcentajeAcierto * 100).toStringAsFixed(1)}%',
-                    ),
-                    _ResumenChip(
-                      label: '7m',
-                      value: '${resumen.goles7m}/${resumen.lanzamientos7m}',
-                    ),
-                    _ResumenChip(
-                        label: 'Perdidas',
-                        value: resumen.perdidas.toString()),
-                    _ResumenChip(
-                        label: 'Recup.',
-                        value: resumen.recuperaciones.toString()),
-                    _ResumenChip(
-                        label: "2'", value: resumen.exclusiones2m.toString()),
-                    _ResumenChip(
-                        label: 'Amarillas',
-                        value: resumen.amarillas.toString()),
-                    _ResumenChip(
-                        label: 'Rojas', value: resumen.rojas.toString()),
-                    _ResumenChip(
-                        label: 'Azules', value: resumen.azules.toString()),
-                  ],
-                ),
-              ],
-            ),
-          ),
-        ),
-        ...jugadores.map((p) {
-          final nombre = p.nombre ??
-              _EstadisticasBody._nombreJugador(
-                mapaConvocados,
-                p.dorsal,
-              );
-          final posicion = _EstadisticasBody._posicionJugador(
-            mapaConvocados,
-            p.dorsal,
-          );
-          final esPortero = p.esPortero ||
-              _EstadisticasBody._esPortero(
-                mapaConvocados,
-                p.dorsal,
-              );
-          final String keyTiempo = '$equipoId#${p.dorsal}';
-          final int segundosJugados = tiemposJugados[keyTiempo] ?? 0;
-          final acierto = p.lanzamientosTotales == 0
-              ? '0.0%'
-              : '${(p.golesTotales * 100 / p.lanzamientosTotales).toStringAsFixed(1)}%';
-
+      itemCount: jugadores.length + 1,
+      itemBuilder: (context, index) {
+        if (index == 0) {
           return Card(
-            margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+            margin: const EdgeInsets.all(12),
             child: Padding(
-              padding: const EdgeInsets.all(8),
-              child: Row(
+              padding: const EdgeInsets.all(12),
+              child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Container(
-                    width: 48,
-                    height: 48,
-                    decoration: BoxDecoration(
-                      color: esPortero
-                          ? Colors.lightBlue.shade200
-                          : Colors.amber.shade100,
-                      shape: BoxShape.circle,
-                    ),
-                    alignment: Alignment.center,
-                    child: Text(
-                      p.dorsal.toString(),
-                      style: const TextStyle(
-                        fontWeight: FontWeight.bold,
-                        fontSize: 18,
-                      ),
-                    ),
+                  Text(
+                    'Resumen $nombreEquipo',
+                    style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                          fontWeight: FontWeight.bold,
+                        ),
                   ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          nombre.toUpperCase(),
-                          style: const TextStyle(
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
-                        if (posicion.isNotEmpty)
-                          Text(
-                            posicion,
-                            style: TextStyle(
-                              color: Colors.grey.shade700,
-                              fontSize: 12,
-                            ),
-                          ),
-                        const SizedBox(height: 4),
-                        SingleChildScrollView(
-                          scrollDirection: Axis.horizontal,
-                          child: Row(
-                            children: [
-                              _StatChip(
-                                label: 'Tiempo',
-                                value: formatTiempo(segundosJugados),
-                              ),
-                              _StatChip(
-                                label: 'G/L',
-                                value:
-                                    '${p.golesTotales}/${p.lanzamientosTotales} ($acierto)',
-                              ),
-                              _StatChip(
-                                label: '6m',
-                                value:
-                                    '${p.goles6m}/${p.lanzamientos6m}',
-                              ),
-                              _StatChip(
-                                label: '8m',
-                                value:
-                                    '${p.goles8m}/${p.lanzamientos8m}',
-                              ),
-                              _StatChip(
-                                label: '9m',
-                                value:
-                                    '${p.goles9m}/${p.lanzamientos9m}',
-                              ),
-                              _StatChip(
-                                label: '7m',
-                                value:
-                                    '${p.goles7m}/${p.lanzamientos7m}',
-                              ),
-                              _StatChip(
-                                label: 'Perd',
-                                value: '${p.perdidas}',
-                              ),
-                              _StatChip(
-                                label: 'Rec',
-                                value: '${p.recuperaciones}',
-                              ),
-                              _StatChip(
-                                label: 'Golpe',
-                                value: '${p.golpesCometidos}',
-                              ),
-                              _StatChip(
-                                label: 'Prov.G',
-                                value: '${p.golpesProvocados}',
-                              ),
-                              _StatChip(
-                                label: "2'",
-                                value: '${p.exclusiones2m}',
-                              ),
-                              _StatChip(
-                                label: '🟨',
-                                value: '${p.amarillas}',
-                              ),
-                              _StatChip(
-                                label: '🟥',
-                                value: '${p.rojas}',
-                              ),
-                              _StatChip(
-                                label: '🟦',
-                                value: '${p.azules}',
-                              ),
-                              if (esPortero) ...[
-                                _StatChip(
-                                  label: 'Par',
-                                  value: '${p.paradas}',
-                                ),
-                                _StatChip(
-                                  label: 'Enc',
-                                  value: '${p.golesEncajados}',
-                                ),
-                                _StatChip(
-                                  label: '%Par',
-                                  value: p.lanzamientosRecibidos > 0
-                                      ? '${(p.paradas * 100 / p.lanzamientosRecibidos).toStringAsFixed(1)}%'
-                                      : '0%',
-                                ),
-                              ],
-                            ],
-                          ),
-                        ),
-                      ],
-                    ),
+                  const SizedBox(height: 8),
+                  Wrap(
+                    spacing: 16,
+                    runSpacing: 8,
+                    children: [
+                      _ResumenChip(
+                          label: 'Lanzamientos',
+                          value: resumen.lanzamientosTotales.toString()),
+                      _ResumenChip(
+                          label: 'Goles',
+                          value: resumen.golesTotales.toString()),
+                      _ResumenChip(
+                        label: 'Acierto',
+                        value:
+                            '${(resumen.porcentajeAcierto * 100).toStringAsFixed(1)}%',
+                      ),
+                      _ResumenChip(
+                        label: '7m',
+                        value: '${resumen.goles7m}/${resumen.lanzamientos7m}',
+                      ),
+                      _ResumenChip(
+                          label: 'Perdidas',
+                          value: resumen.perdidas.toString()),
+                      _ResumenChip(
+                          label: 'Recup.',
+                          value: resumen.recuperaciones.toString()),
+                      _ResumenChip(
+                          label: "2'", value: resumen.exclusiones2m.toString()),
+                      _ResumenChip(
+                          label: 'Amarillas',
+                          value: resumen.amarillas.toString()),
+                      _ResumenChip(
+                          label: 'Rojas', value: resumen.rojas.toString()),
+                      _ResumenChip(
+                          label: 'Azules', value: resumen.azules.toString()),
+                    ],
                   ),
                 ],
               ),
             ),
           );
-        }).toList(),
-      ],
+        }
+
+        final p = jugadores[index - 1];
+        final nombre = p.nombre ??
+            _EstadisticasBody._nombreJugador(
+              mapaConvocados,
+              p.dorsal,
+            );
+        final posicion = _EstadisticasBody._posicionJugador(
+          mapaConvocados,
+          p.dorsal,
+        );
+        final esPortero = p.esPortero ||
+            _EstadisticasBody._esPortero(
+              mapaConvocados,
+              p.dorsal,
+            );
+        final String keyTiempo = '$equipoId#${p.dorsal}';
+        final int segundosJugados = tiemposJugados[keyTiempo] ?? 0;
+        final acierto = p.lanzamientosTotales == 0
+            ? '0.0%'
+            : '${(p.golesTotales * 100 / p.lanzamientosTotales).toStringAsFixed(1)}%';
+
+        return Card(
+          margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+          child: Padding(
+            padding: const EdgeInsets.all(8),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Container(
+                  width: 48,
+                  height: 48,
+                  decoration: BoxDecoration(
+                    color: esPortero
+                        ? Colors.lightBlue.shade200
+                        : Colors.amber.shade100,
+                    shape: BoxShape.circle,
+                  ),
+                  alignment: Alignment.center,
+                  child: Text(
+                    p.dorsal.toString(),
+                    style: const TextStyle(
+                      fontWeight: FontWeight.bold,
+                      fontSize: 18,
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        nombre.toUpperCase(),
+                        style: const TextStyle(
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                      if (posicion.isNotEmpty)
+                        Text(
+                          posicion,
+                          style: TextStyle(
+                            color: Colors.grey.shade700,
+                            fontSize: 12,
+                          ),
+                        ),
+                      const SizedBox(height: 4),
+                      SingleChildScrollView(
+                        scrollDirection: Axis.horizontal,
+                        child: Row(
+                          children: [
+                            _StatChip(
+                              label: 'Tiempo',
+                              value: formatTiempo(segundosJugados),
+                            ),
+                            _StatChip(
+                              label: 'G/L',
+                              value:
+                                  '${p.golesTotales}/${p.lanzamientosTotales} ($acierto)',
+                            ),
+                            _StatChip(
+                              label: '6m',
+                              value: '${p.goles6m}/${p.lanzamientos6m}',
+                            ),
+                            _StatChip(
+                              label: '8m',
+                              value: '${p.goles8m}/${p.lanzamientos8m}',
+                            ),
+                            _StatChip(
+                              label: '9m',
+                              value: '${p.goles9m}/${p.lanzamientos9m}',
+                            ),
+                            _StatChip(
+                              label: '7m',
+                              value: '${p.goles7m}/${p.lanzamientos7m}',
+                            ),
+                            _StatChip(
+                              label: 'Perd',
+                              value: '${p.perdidas}',
+                            ),
+                            _StatChip(
+                              label: 'Rec',
+                              value: '${p.recuperaciones}',
+                            ),
+                            _StatChip(
+                              label: 'Golpe',
+                              value: '${p.golpesCometidos}',
+                            ),
+                            _StatChip(
+                              label: 'Prov.G',
+                              value: '${p.golpesProvocados}',
+                            ),
+                            _StatChip(
+                              label: "2'",
+                              value: '${p.exclusiones2m}',
+                            ),
+                            _StatChip(
+                              label: '🟨',
+                              value: '${p.amarillas}',
+                            ),
+                            _StatChip(
+                              label: '🟥',
+                              value: '${p.rojas}',
+                            ),
+                            _StatChip(
+                              label: '🟦',
+                              value: '${p.azules}',
+                            ),
+                            if (esPortero) ...[
+                              _StatChip(
+                                label: 'Par',
+                                value: '${p.paradas}',
+                              ),
+                              _StatChip(
+                                label: 'Enc',
+                                value: '${p.golesEncajados}',
+                              ),
+                              _StatChip(
+                                label: '%Par',
+                                value: p.lanzamientosRecibidos > 0
+                                    ? '${(p.paradas * 100 / p.lanzamientosRecibidos).toStringAsFixed(1)}%'
+                                    : '0%',
+                              ),
+                            ],
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
     );
   }
 }
