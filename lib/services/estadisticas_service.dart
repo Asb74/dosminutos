@@ -128,10 +128,9 @@ class PartidoStats {
   }
 }
 
-PartidoStats calcularEstadisticasPartidoDesdeSnapshots({
+PartidoStats calcularEstadisticasPartidoDesdeEstadisticas({
   required Map<String, dynamic> partidoData,
-  required QuerySnapshot<Map<String, dynamic>> datosSnapshot,
-  required QuerySnapshot<Map<String, dynamic>> sancionesSnapshot,
+  required QuerySnapshot<Map<String, dynamic>> estadisticasSnapshot,
 }) {
   final mapa = <String, StatsJugador>{};
   final stats = PartidoStats(mapa);
@@ -176,123 +175,87 @@ PartidoStats calcularEstadisticasPartidoDesdeSnapshots({
     return statsJugador;
   }
 
-  for (final doc in datosSnapshot.docs) {
-    final data = doc.data();
-    final String? equipoPrincipalId = data['equipoPrincipal'] as String?;
-    final int? dorsalPrincipal = (data['dorsalPrincipal'] as num?)?.toInt();
-    final String? equipoSecundarioId = data['equipoSecundario'] as String?;
-    final int? dorsalSecundario = (data['dorsalSecundario'] as num?)?.toInt();
-    final String? accion = data['accion'] as String?;
-    final String? zonaCampo = data['zonaCampo'] as String?;
-    final zona = clasificarZona(zonaCampo);
-
-    StatsJugador? pj;
-    StatsJugador? sj;
-
-    if (equipoPrincipalId != null && dorsalPrincipal != null) {
-      pj = obtenerStatsJugador(equipoPrincipalId, dorsalPrincipal);
-    }
-    if (equipoSecundarioId != null && dorsalSecundario != null) {
-      sj = obtenerStatsJugador(equipoSecundarioId, dorsalSecundario);
-    }
-
-    if (pj == null || accion == null) continue;
-
-    final bool esLanzamiento =
-        accion == 'Gol' || accion == 'Gol Contra' || accion == 'Fallo' ||
-            accion == 'Parada' || accion == 'Bloqueo';
-
-    if (esLanzamiento) {
-      pj.lanzamientosTotales++;
-
-      void cuentaZona(bool esGol) {
-        switch (zona) {
-          case ZonaTiro.seis:
-            pj!.lanzamientos6m++;
-            if (esGol) pj.goles6m++;
-            break;
-          case ZonaTiro.ocho:
-            pj!.lanzamientos8m++;
-            if (esGol) pj.goles8m++;
-            break;
-          case ZonaTiro.nueve:
-            pj!.lanzamientos9m++;
-            if (esGol) pj.goles9m++;
-            break;
-          case ZonaTiro.siete:
-            pj!.lanzamientos7m++;
-            if (esGol) pj.goles7m++;
-            break;
-          default:
-            break;
-        }
-      }
-
-      if (accion == 'Gol' || accion == 'Gol Contra') {
-        pj.golesTotales++;
-        cuentaZona(true);
-      } else {
-        cuentaZona(false);
-      }
-    }
-
-    if (sj != null &&
-        (accion == 'Gol' || accion == 'Gol Contra' || accion == 'Parada')) {
-      sj.lanzamientosRecibidos++;
-      if (accion == 'Parada') {
-        sj.paradas++;
-      } else {
-        sj.golesEncajados++;
-      }
-    }
-
-    if (accion == 'Perdida') {
-      pj.perdidas++;
-    } else if (accion == 'Recuperación') {
-      pj.recuperaciones++;
-    }
-
-    if (accion == 'Golpe') {
-      pj.golpesCometidos++;
-      if (sj != null) sj.golpesProvocados++;
-    }
-
-    if (accion == '2 minutos') {
-      pj.exclusiones2m++;
-    }
-    if (accion == 'Tarjeta Amarilla') {
-      pj.amarillas++;
-    }
-    if (accion == 'Tarjeta Roja') {
-      pj.rojas++;
-    }
-    if (accion == 'Tarjeta Azul') {
-      pj.azules++;
-    }
-  }
-
-  for (final doc in sancionesSnapshot.docs) {
+  for (final doc in estadisticasSnapshot.docs) {
     final data = doc.data();
     final String? equipoId = data['equipoId'] as String?;
     final int? dorsal = (data['dorsal'] as num?)?.toInt();
-    final String? tipo = data['tipo'] as String?;
+    final String? categoria = data['categoria'] as String?;
+    final String? zonaCampo = data['zona'] as String?;
+    final zona = clasificarZona(zonaCampo);
 
-    if (equipoId == null || dorsal == null || tipo == null) continue;
+    if (equipoId == null || dorsal == null || categoria == null) continue;
 
-    final p = obtenerStatsJugador(equipoId, dorsal);
+    final jugador = obtenerStatsJugador(equipoId, dorsal);
 
-    switch (tipo) {
-      case '2min':
-        p.exclusiones2m++;
+    void cuentaZona(bool esGol) {
+      switch (zona) {
+        case ZonaTiro.seis:
+          jugador.lanzamientos6m++;
+          if (esGol) jugador.goles6m++;
+          break;
+        case ZonaTiro.ocho:
+          jugador.lanzamientos8m++;
+          if (esGol) jugador.goles8m++;
+          break;
+        case ZonaTiro.nueve:
+          jugador.lanzamientos9m++;
+          if (esGol) jugador.goles9m++;
+          break;
+        case ZonaTiro.siete:
+          jugador.lanzamientos7m++;
+          if (esGol) jugador.goles7m++;
+          break;
+        default:
+          break;
+      }
+    }
+
+    switch (categoria) {
+      case 'Gol':
+        jugador.lanzamientosTotales++;
+        jugador.golesTotales++;
+        cuentaZona(true);
         break;
-      case 'amarilla':
-        p.amarillas++;
+      case 'Lanzamiento':
+      case 'Lanzamiento Fallado':
+      case 'Bloqueo':
+        jugador.lanzamientosTotales++;
+        cuentaZona(false);
         break;
-      case 'roja':
-        p.rojas++;
+      case 'Gol Encajado':
+        jugador.lanzamientosRecibidos++;
+        jugador.golesEncajados++;
         break;
-      case 'azul':
-        p.azules++;
+      case 'Parada':
+        jugador.lanzamientosRecibidos++;
+        jugador.paradas++;
+        break;
+      case 'Lanzamiento Recibido':
+        jugador.lanzamientosRecibidos++;
+        break;
+      case 'Perdida':
+        jugador.perdidas++;
+        break;
+      case 'Recuperación':
+        jugador.recuperaciones++;
+        break;
+      case 'Falta':
+        jugador.golpesCometidos++;
+        break;
+      case 'Falta Provocada':
+        jugador.golpesProvocados++;
+        break;
+      case '2 minutos':
+        jugador.exclusiones2m++;
+        break;
+      case 'Amarilla':
+        jugador.amarillas++;
+        break;
+      case 'Roja':
+        jugador.rojas++;
+        break;
+      case 'Azul':
+        jugador.azules++;
         break;
     }
   }

@@ -9,6 +9,7 @@ import '../models/partido.dart';
 import 'cambios_screen.dart';
 import 'estadisticas_partido_screen.dart';
 import '../widgets/sanciones_widgets.dart';
+import '../services/registro_estadisticas_service.dart';
 
 class PorteriaGridSelector extends StatelessWidget {
   const PorteriaGridSelector({
@@ -1034,27 +1035,27 @@ class _PartidoEnJuegoScreenState extends State<PartidoEnJuegoScreen> {
 
       final partidoRef =
           FirebaseFirestore.instance.collection('Partidos').doc(widget.partidoId);
-      final accionesRef = FirebaseFirestore.instance
-          .collection('ActaPartido')
-          .doc(widget.partidoId)
-          .collection('Datos');
       final equipoPrincipalId = _equipoIdDesdeClave(_equipoPrincipal);
       final equipoSecundarioId = _equipoIdDesdeClave(_equipoSecundario);
-      final datos = {
-        'partidoId': widget.partidoId,
-        'timestamp': FieldValue.serverTimestamp(),
-        'periodo': _periodoActual,
-        'tiempoJuego': _formatDuration(_elapsed),
-        'equipoPrincipal': equipoPrincipalId,
-        'dorsalPrincipal': _dorsalPrincipal,
-        'equipoSecundario': equipoSecundarioId,
-        'dorsalSecundario': _dorsalSecundario,
-        'zonaCampo': _zonaCampo,
-        'zonaPorteria': _zonaPorteria,
-        'accion': _accionSeleccionada,
-      };
+      final dorsalSecundario = (_dorsalSecundario as num?)?.toInt();
 
-      await accionesRef.add(datos);
+      if (equipoPrincipalId == null) {
+        _mostrarSnackBar('No se pudo obtener el equipo principal.');
+        return;
+      }
+      final zonaSeleccionada = _zonaPorteria ?? _zonaCampo;
+
+      await registrarEstadisticasDesdeAccion(
+        _accionSeleccionada!,
+        widget.partidoId,
+        equipoPrincipalId!,
+        _dorsalPrincipal!,
+        equipoSecundarioId,
+        dorsalSecundario,
+        periodoActual: _periodoActual,
+        segundoActual: _elapsed.inSeconds,
+        zonaSeleccionada: zonaSeleccionada,
+      );
 
       if (_accionSeleccionada == 'Gol' || _accionSeleccionada == 'Gol Contra') {
         final incrementos = <String, dynamic>{};
