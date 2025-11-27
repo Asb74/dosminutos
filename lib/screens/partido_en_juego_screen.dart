@@ -156,6 +156,7 @@ class _PartidoEnJuegoScreenState extends State<PartidoEnJuegoScreen> {
   final Map<String, SancionEstado> _estadoSanciones = {};
   Map<String, int> _tiemposJugadosCache = {};
   int _ultimoSegundoContabilizado = 0;
+  int _tiempoNoPersistido = 0;
 
   final List<String> _periodos = const [
     '1º Tiempo',
@@ -231,13 +232,18 @@ class _PartidoEnJuegoScreenState extends State<PartidoEnJuegoScreen> {
 
   void _iniciarTimerLocal() {
     _timer?.cancel();
-    _timer = Timer.periodic(const Duration(seconds: 1), (timer) async {
+    _timer = Timer.periodic(const Duration(seconds: 1), (timer) {
       setState(() {
         _elapsed += const Duration(seconds: 1);
         _ticksSincePersist++;
       });
 
-      await _actualizarTiemposJugadosDesdeCronometro();
+      final currentSeconds = _elapsed.inSeconds;
+      final delta = currentSeconds - _ultimoSegundoContabilizado;
+      if (delta > 0) {
+        _ultimoSegundoContabilizado = currentSeconds;
+        _tiempoNoPersistido += delta;
+      }
 
       final maxSegundos = _maxSegundosPeriodo();
       if (_elapsed.inSeconds >= maxSegundos) {
@@ -291,7 +297,7 @@ class _PartidoEnJuegoScreenState extends State<PartidoEnJuegoScreen> {
       _isPlaying = false;
     });
     final segundos = _elapsed.inSeconds;
-    await _actualizarTiemposJugadosDesdeCronometro();
+    await _flushTiemposJugados();
     await FirebaseFirestore.instance
         .collection('Partidos')
         .doc(widget.partidoId)
@@ -381,7 +387,7 @@ class _PartidoEnJuegoScreenState extends State<PartidoEnJuegoScreen> {
     _timer?.cancel();
     _timer = null;
 
-    await _actualizarTiemposJugadosDesdeCronometro();
+    await _flushTiemposJugados();
 
     final currentIndex = _periodos.indexOf(_periodoActual);
     final nextIndex = (currentIndex + 1) % _periodos.length;
@@ -389,6 +395,7 @@ class _PartidoEnJuegoScreenState extends State<PartidoEnJuegoScreen> {
       _periodoActual = _periodos[nextIndex];
       _isPlaying = false;
       _elapsed = Duration.zero;
+      _ultimoSegundoContabilizado = 0;
     });
     await FirebaseFirestore.instance.collection('Partidos').doc(widget.partidoId).update({
       'periodoActual': _periodoActual,
@@ -447,10 +454,10 @@ class _PartidoEnJuegoScreenState extends State<PartidoEnJuegoScreen> {
   }
 
   Future<void> _persistTiempo() async {
+    _ultimoSegundoContabilizado = _elapsed.inSeconds;
     final updateData = {
       'segundoPartido': _elapsed.inSeconds,
       'periodoActual': _periodoActual,
-      'tiemposJugados': _tiemposJugadosCache,
     };
 
     if (_isPlaying) {
@@ -462,55 +469,37 @@ class _PartidoEnJuegoScreenState extends State<PartidoEnJuegoScreen> {
         .collection('Partidos')
         .doc(widget.partidoId)
         .update(updateData);
+
+    await _flushTiemposJugados();
   }
 
-  Future<void> _actualizarTiemposJugadosDesdeCronometro() async {
-    if (_partido == null) return;
-    final segundosActuales = _elapsed.inSeconds;
-    final delta = segundosActuales - _ultimoSegundoContabilizado;
-    if (delta <= 0) return;
-    print('Actualizando tiempos jugados: actuales=$segundosActuales delta=$delta');
-    await _sumarSegundosJugados(delta);
-    _ultimoSegundoContabilizado = segundosActuales;
-  }
+  Future<void> _flushTiemposJugados() async {
+    if (_tiempoNoPersistido <= 0 || _partido == null) return;
 
-  Future<void> _sumarSegundosJugados(int deltaSegundos) async {
-    if (deltaSegundos <= 0) return;
-    if (_partido == null) return;
+    final delta = _tiempoNoPersistido;
+    _tiempoNoPersistido = 0;
 
-    final equipoLocalId = _partido!.equipoLocalId;
-    final equipoVisitanteId = _partido!.equipoVisitanteId;
+    final partido = _partido!;
+    final tiempos = Map<String, int>.from(_tiemposJugadosCache);
 
-    final Map<String, FieldValue> incrementos = {};
-    final List<String> clavesActualizadas = [];
-
-    void procesar(List<Map<String, dynamic>> jugadores, String? equipoId) {
-      if (equipoId == null) return;
-      for (final jugador in jugadores) {
-        final dorsal = (jugador['dorsal'] as num?)?.toInt();
+    void addForList(List<Map<String, dynamic>> jugadores, String equipoId) {
+      for (final j in jugadores) {
+        final dorsal = (j['dorsal'] as num?)?.toInt();
         if (dorsal == null) continue;
         final key = '$equipoId#$dorsal';
-        clavesActualizadas.add(key);
-        _tiemposJugadosCache[key] =
-            (_tiemposJugadosCache[key] ?? 0) + deltaSegundos;
-        incrementos['tiemposJugados.$key'] =
-            FieldValue.increment(deltaSegundos);
+        tiempos[key] = (tiempos[key] ?? 0) + delta;
       }
     }
 
-    procesar(_jugadoresLocal, equipoLocalId);
-    procesar(_jugadoresVisitante, equipoVisitanteId);
+    addForList(_jugadoresLocal, partido.equipoLocalId);
+    addForList(_jugadoresVisitante, partido.equipoVisitanteId);
 
-    if (clavesActualizadas.isEmpty) {
-      return;
-    }
-
-    print('Sumando $deltaSegundos segundos a: $clavesActualizadas');
+    _tiemposJugadosCache = tiempos;
 
     await FirebaseFirestore.instance
         .collection('Partidos')
         .doc(widget.partidoId)
-        .update(incrementos);
+        .update({'tiemposJugados': tiempos});
   }
 
   void _tickSanciones() {
@@ -554,8 +543,8 @@ class _PartidoEnJuegoScreenState extends State<PartidoEnJuegoScreen> {
 
     if (aceptar != true) return;
 
-    await _actualizarTiemposJugadosDesdeCronometro();
     await _pauseTimer();
+    await _flushTiemposJugados();
     await FirebaseFirestore.instance.collection('Partidos').doc(widget.partidoId).update({
       'estado': 'Finalizado',
       'segundoPartido': _elapsed.inSeconds,
@@ -879,6 +868,7 @@ class _PartidoEnJuegoScreenState extends State<PartidoEnJuegoScreen> {
     if (!_initialized) {
       _ultimoSegundoContabilizado =
           (data['segundoPartido'] as num?)?.toInt() ?? 0;
+      _tiempoNoPersistido = 0;
     }
 
     int maxSegundos;

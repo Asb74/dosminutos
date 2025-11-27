@@ -222,12 +222,11 @@ class _NuevoPartidoScreenState extends State<NuevoPartidoScreen> {
     }
   }
 
-  Future<List<Map<String, dynamic>>> _obtenerConvocadosStaff() async {
-    if (_selectedEquipoLocal == null) return [];
-
+  Future<List<Map<String, dynamic>>> _obtenerConvocadosStaff(
+      Equipo equipo) async {
     final query = await FirebaseFirestore.instance
         .collection('StaffTecnico')
-        .where('equipoId', isEqualTo: _selectedEquipoLocal!.id)
+        .where('equipoId', isEqualTo: equipo.id)
         .where('convocado', isEqualTo: true)
         .where('lesionado', isEqualTo: false)
         .where('sancionado', isEqualTo: false)
@@ -273,7 +272,12 @@ class _NuevoPartidoScreenState extends State<NuevoPartidoScreen> {
     try {
       final idPartido =
           await CounterService.obtenerSiguienteId('partidos');
-      final staffConvocadoLocal = await _obtenerConvocadosStaff();
+      final staffConvocadoLocal = _selectedEquipoLocal == null
+          ? <Map<String, dynamic>>[]
+          : await _obtenerConvocadosStaff(_selectedEquipoLocal!);
+      final staffConvocadoVisitante = _selectedEquipoVisitante == null
+          ? <Map<String, dynamic>>[]
+          : await _obtenerConvocadosStaff(_selectedEquipoVisitante!);
       final convocadosLocalCompleto = _selectedEquipoLocal == null
           ? <Map<String, dynamic>>[]
           : await _obtenerConvocadosEquipo(_selectedEquipoLocal!);
@@ -309,7 +313,7 @@ class _NuevoPartidoScreenState extends State<NuevoPartidoScreen> {
         convocadosLocal: convLocal,
         convocadosVisitante: convVis,
         staffConvocadoLocal: staffConvocadoLocal,
-        staffConvocadoVisitante: const <Map<String, dynamic>>[],
+        staffConvocadoVisitante: staffConvocadoVisitante,
         estado: 'Programado',
         golesLocal: 0,
         golesVisitante: 0,
