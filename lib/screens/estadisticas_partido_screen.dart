@@ -55,33 +55,41 @@ class _EstadisticasPartidoScreenState extends State<EstadisticasPartidoScreen> {
         appBar: AppBar(
           title: const Text('Estadísticas'),
         ),
-        body: StreamBuilder<DocumentSnapshot<Map<String, dynamic>>>(
-          stream: FirebaseFirestore.instance
-              .collection('Partidos')
-              .doc(widget.partidoId)
-              .snapshots(),
-          builder: (context, partidoSnapshot) {
-            if (partidoSnapshot.hasError) {
-              return Center(child: Text('Error: ${partidoSnapshot.error}'));
-            }
+        body: Column(
+          children: [
+            Expanded(
+              child: StreamBuilder<DocumentSnapshot<Map<String, dynamic>>>(
+                stream: FirebaseFirestore.instance
+                    .collection('Partidos')
+                    .doc(widget.partidoId)
+                    .snapshots(),
+                builder: (context, partidoSnapshot) {
+                  if (partidoSnapshot.hasError) {
+                    return Center(
+                        child: Text('Error: ${partidoSnapshot.error}'));
+                  }
 
-            if (partidoSnapshot.hasData && partidoSnapshot.data?.data() != null) {
-              _ultimaData = partidoSnapshot.data!.data();
-            }
+                  if (partidoSnapshot.hasData &&
+                      partidoSnapshot.data?.data() != null) {
+                    _ultimaData = partidoSnapshot.data!.data();
+                  }
 
-            if (_ultimaData == null) {
-              return const Center(child: CircularProgressIndicator());
-            }
+                  if (_ultimaData == null) {
+                    return const Center(child: CircularProgressIndicator());
+                  }
 
-            final data = _ultimaData!;
+                  final data = _ultimaData!;
 
-            return _EstadisticasBody(
-              partidoId: widget.partidoId,
-              partidoData: data,
-              scrollControllerLocal: _scrollControllerLocal,
-              scrollControllerVisitante: _scrollControllerVisitante,
-            );
-          },
+                  return _EstadisticasBody(
+                    partidoId: widget.partidoId,
+                    partidoData: data,
+                    scrollControllerLocal: _scrollControllerLocal,
+                    scrollControllerVisitante: _scrollControllerVisitante,
+                  );
+                },
+              ),
+            ),
+          ],
         ),
       ),
     );
