@@ -715,12 +715,10 @@ class _PartidoEnJuegoScreenState extends State<PartidoEnJuegoScreen> {
         'periodo': periodo,
         'segundoPartido': segundoPartido,
         'timestamp': FieldValue.serverTimestamp(),
+        'zonaJuego': zonaDeJuego,
+        'zona': zonaDeJuego,
       };
 
-      if (zonaDeJuego != null) {
-        dataAsistencia['zonaJuego'] = zonaDeJuego;
-        dataAsistencia['zona'] = zonaDeJuego;
-      }
       if (zonaPorteria != null) {
         dataAsistencia['zonaPorteria'] = zonaPorteria;
       }
