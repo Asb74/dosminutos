@@ -592,6 +592,145 @@ class _PartidoEnJuegoScreenState extends State<PartidoEnJuegoScreen> {
     return accion == 'Gol' || accion == 'Gol Contra' || accion == 'Parada';
   }
 
+  Future<void> _preguntarAsistenciaSiProcede({
+    required BuildContext context,
+    required String partidoId,
+    required String equipoIdGoleador,
+    required int dorsalGoleador,
+    required String periodo,
+    required int segundoPartido,
+    String? zonaDeJuego,
+    String? zonaPorteria,
+  }) async {
+    final partidoActual = _partido;
+    if (partidoActual == null) return;
+
+    final esLocal = partidoActual.equipoLocalId == equipoIdGoleador;
+    final esVisitante = partidoActual.equipoVisitanteId == equipoIdGoleador;
+    if (!esLocal && !esVisitante) return;
+
+    final jugadoresEnJuego = esLocal ? _jugadoresLocal : _jugadoresVisitante;
+
+    final dorsalesDisponibles = jugadoresEnJuego
+        .map((j) => (j['dorsal'] as num?)?.toInt())
+        .whereType<int>()
+        .where((dorsal) => dorsal != dorsalGoleador)
+        .toList();
+
+    if (dorsalesDisponibles.isEmpty) return;
+
+    dorsalesDisponibles.sort();
+
+    final dorsalAsistente = await showModalBottomSheet<int?>(
+      context: context,
+      backgroundColor: Theme.of(context).colorScheme.surface,
+      builder: (ctx) {
+        return SafeArea(
+          child: Padding(
+            padding: const EdgeInsets.all(16),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Expanded(
+                      child: Text(
+                        'Selecciona asistente',
+                        style: Theme.of(ctx).textTheme.titleMedium,
+                      ),
+                    ),
+                    IconButton(
+                      onPressed: () => Navigator.of(ctx).pop(),
+                      icon: const Icon(Icons.close),
+                      tooltip: 'Cerrar',
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 12),
+                Wrap(
+                  spacing: 12,
+                  runSpacing: 12,
+                  children: dorsalesDisponibles.map((dorsal) {
+                    return GestureDetector(
+                      onTap: () => Navigator.of(ctx).pop(dorsal),
+                      child: Container(
+                        width: 56,
+                        height: 56,
+                        decoration: BoxDecoration(
+                          color: Colors.amber.shade100,
+                          shape: BoxShape.circle,
+                          boxShadow: const [
+                            BoxShadow(
+                              color: Colors.black12,
+                              blurRadius: 4,
+                              offset: Offset(0, 2),
+                            ),
+                          ],
+                        ),
+                        alignment: Alignment.center,
+                        child: Text(
+                          dorsal.toString(),
+                          style: const TextStyle(
+                            fontWeight: FontWeight.bold,
+                            fontSize: 16,
+                            color: Colors.black87,
+                          ),
+                        ),
+                      ),
+                    );
+                  }).toList(),
+                ),
+                const SizedBox(height: 8),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+
+    if (dorsalAsistente == null) return;
+
+    try {
+      final firestore = FirebaseFirestore.instance;
+      final accionSnap =
+          await firestore.collection('AccionEstadistica').doc('Asistencia').get();
+      final dataAccion = accionSnap.data();
+      final principalRaw = dataAccion?['EstadisticaDorsalPrincipal'];
+      final estadisticaPrincipal =
+          principalRaw is String && principalRaw.trim().isNotEmpty
+              ? principalRaw.trim()
+              : 'Asistencia';
+
+      final estadisticasRef = firestore
+          .collection('ActaPartido')
+          .doc(partidoId)
+          .collection('Estadisticas');
+
+      final dataAsistencia = <String, dynamic>{
+        'accion': estadisticaPrincipal,
+        'categoria': 'Asistencia',
+        'dorsal': dorsalAsistente,
+        'equipoId': equipoIdGoleador,
+        'periodo': periodo,
+        'segundoPartido': segundoPartido,
+        'timestamp': FieldValue.serverTimestamp(),
+      };
+
+      if (zonaDeJuego != null) {
+        dataAsistencia['zonaJuego'] = zonaDeJuego;
+        dataAsistencia['zona'] = zonaDeJuego;
+      }
+      if (zonaPorteria != null) {
+        dataAsistencia['zonaPorteria'] = zonaPorteria;
+      }
+
+      await estadisticasRef.add(dataAsistencia);
+    } catch (e) {
+      _mostrarSnackBar('Error al registrar asistencia: $e');
+    }
+  }
+
   String? _equipoIdDesdeClave(String? clave) {
     if (clave == 'local') return _partido?.equipoLocalId;
     if (clave == 'visitante') return _partido?.equipoVisitanteId;
@@ -1056,6 +1195,19 @@ class _PartidoEnJuegoScreenState extends State<PartidoEnJuegoScreen> {
         zonaDeJuego: _zonaCampo!,
         zonaPorteria: _zonaPorteria,
       );
+
+      if (_accionSeleccionada == 'Gol') {
+        await _preguntarAsistenciaSiProcede(
+          context: context,
+          partidoId: widget.partidoId,
+          equipoIdGoleador: equipoPrincipalId,
+          dorsalGoleador: _dorsalPrincipal!,
+          periodo: _periodoActual,
+          segundoPartido: _elapsed.inSeconds,
+          zonaDeJuego: _zonaCampo,
+          zonaPorteria: _zonaPorteria,
+        );
+      }
 
       if (_accionSeleccionada == 'Gol' || _accionSeleccionada == 'Gol Contra') {
         final incrementos = <String, dynamic>{};
