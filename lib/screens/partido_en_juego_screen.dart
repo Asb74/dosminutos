@@ -1043,7 +1043,6 @@ class _PartidoEnJuegoScreenState extends State<PartidoEnJuegoScreen> {
         _mostrarSnackBar('No se pudo obtener el equipo principal.');
         return;
       }
-      final zonaSeleccionada = _zonaPorteria ?? _zonaCampo;
 
       await registrarEstadisticasDesdeAccion(
         _accionSeleccionada!,
@@ -1054,7 +1053,8 @@ class _PartidoEnJuegoScreenState extends State<PartidoEnJuegoScreen> {
         dorsalSecundario,
         periodoActual: _periodoActual,
         segundoActual: _elapsed.inSeconds,
-        zonaSeleccionada: zonaSeleccionada,
+        zonaDeJuego: _zonaCampo!,
+        zonaPorteria: _zonaPorteria,
       );
 
       if (_accionSeleccionada == 'Gol' || _accionSeleccionada == 'Gol Contra') {
