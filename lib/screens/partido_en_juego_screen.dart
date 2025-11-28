@@ -1194,7 +1194,7 @@ class _PartidoEnJuegoScreenState extends State<PartidoEnJuegoScreen> {
         zonaPorteria: _zonaPorteria,
       );
 
-      if (_accionSeleccionada == 'Gol') {
+      if (_accionSeleccionada == 'Gol' || _accionSeleccionada == 'Gol Contra') {
         await _preguntarAsistenciaSiProcede(
           context: context,
           partidoId: widget.partidoId,
