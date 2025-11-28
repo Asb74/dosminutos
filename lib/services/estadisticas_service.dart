@@ -2,6 +2,58 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 
 enum ZonaTiro { seis, ocho, nueve, siete, otra }
 
+const List<String> ordenStatsJugador = [
+  'Gol',
+  'Gol 6m',
+  'Gol 8m',
+  'Gol 9m',
+  'Gol 7m',
+  'Linea',
+  'Perdida Posesión',
+  'Recuperación Posesión',
+  'Golpe cometido',
+  'Golpe provocado',
+  'Asistencia',
+  '2 minutos',
+  'Tarjeta Amarilla',
+  'Tarjeta Roja',
+  'Tarjeta Azul',
+  'Parada',
+  'Gol Encajado',
+];
+
+class MapeoAccionEstadistica {
+  final String estadisticaPrincipal;
+  final String estadisticaSecundaria;
+
+  const MapeoAccionEstadistica(
+    this.estadisticaPrincipal,
+    this.estadisticaSecundaria,
+  );
+}
+
+Future<Map<String, MapeoAccionEstadistica>> cargarMapaAccionesEstadistica() {
+  _mapaAccionesFuture ??=
+      FirebaseFirestore.instance.collection('AccionEstadistica').get().then(
+    (snapshot) {
+      final mapa = <String, MapeoAccionEstadistica>{};
+      for (final doc in snapshot.docs) {
+        final data = doc.data();
+        final principal = (data['EstadisticaDorsalPrincipal'] as String?) ??
+            doc.id;
+        final secundaria = (data['EstadisticaDorsalSecundario'] as String?) ??
+            doc.id;
+        mapa[doc.id] = MapeoAccionEstadistica(principal, secundaria);
+      }
+      return mapa;
+    },
+  );
+
+  return _mapaAccionesFuture!;
+}
+
+Future<Map<String, MapeoAccionEstadistica>>? _mapaAccionesFuture;
+
 ZonaTiro clasificarZona(String? zonaCampo) {
   switch (zonaCampo) {
     case '7M':
@@ -32,6 +84,8 @@ class StatsJugador {
   bool esPortero;
 
   int segsJugados = 0;
+
+  Map<String, int> contadores = {};
 
   // Tiro general
   int lanzamientosTotales = 0;
@@ -83,6 +137,7 @@ class ResumenEquipo {
   int amarillas = 0;
   int rojas = 0;
   int azules = 0;
+  Map<String, int> contadores = {};
 
   double get porcentajeAcierto =>
       lanzamientosTotales == 0 ? 0 : golesTotales / lanzamientosTotales;
@@ -123,17 +178,21 @@ class PartidoStats {
       resumen.amarillas += p.amarillas;
       resumen.rojas += p.rojas;
       resumen.azules += p.azules;
+      p.contadores.forEach((key, value) {
+        resumen.contadores[key] = (resumen.contadores[key] ?? 0) + value;
+      });
     }
     return resumen;
   }
 }
 
-PartidoStats calcularEstadisticasPartidoDesdeEstadisticas({
+Future<PartidoStats> calcularEstadisticasPartidoDesdeEstadisticas({
   required Map<String, dynamic> partidoData,
   required QuerySnapshot<Map<String, dynamic>> estadisticasSnapshot,
-}) {
+}) async {
   final mapa = <String, StatsJugador>{};
   final stats = PartidoStats(mapa);
+  final mapaAcciones = await cargarMapaAccionesEstadistica();
 
   final equipoLocalId = partidoData['equipoLocalId'] as String?;
   final equipoVisitanteId = partidoData['equipoVisitanteId'] as String?;
@@ -180,6 +239,7 @@ PartidoStats calcularEstadisticasPartidoDesdeEstadisticas({
     final String? equipoId = data['equipoId'] as String?;
     final int? dorsal = (data['dorsal'] as num?)?.toInt();
     final String? categoria = data['categoria'] as String?;
+    final String? accion = data['accion'] as String?;
     final String? zonaCampo = data['zona'] as String?;
     final zona = clasificarZona(zonaCampo);
 
@@ -192,70 +252,116 @@ PartidoStats calcularEstadisticasPartidoDesdeEstadisticas({
         case ZonaTiro.seis:
           jugador.lanzamientos6m++;
           if (esGol) jugador.goles6m++;
+          jugador.contadores['Lanzamiento 6m'] =
+              (jugador.contadores['Lanzamiento 6m'] ?? 0) + 1;
+          if (esGol) {
+            jugador.contadores['Gol 6m'] =
+                (jugador.contadores['Gol 6m'] ?? 0) + 1;
+          }
           break;
         case ZonaTiro.ocho:
           jugador.lanzamientos8m++;
           if (esGol) jugador.goles8m++;
+          jugador.contadores['Lanzamiento 8m'] =
+              (jugador.contadores['Lanzamiento 8m'] ?? 0) + 1;
+          if (esGol) {
+            jugador.contadores['Gol 8m'] =
+                (jugador.contadores['Gol 8m'] ?? 0) + 1;
+          }
           break;
         case ZonaTiro.nueve:
           jugador.lanzamientos9m++;
           if (esGol) jugador.goles9m++;
+          jugador.contadores['Lanzamiento 9m'] =
+              (jugador.contadores['Lanzamiento 9m'] ?? 0) + 1;
+          if (esGol) {
+            jugador.contadores['Gol 9m'] =
+                (jugador.contadores['Gol 9m'] ?? 0) + 1;
+          }
           break;
         case ZonaTiro.siete:
           jugador.lanzamientos7m++;
           if (esGol) jugador.goles7m++;
+          jugador.contadores['Lanzamiento 7m'] =
+              (jugador.contadores['Lanzamiento 7m'] ?? 0) + 1;
+          if (esGol) {
+            jugador.contadores['Gol 7m'] =
+                (jugador.contadores['Gol 7m'] ?? 0) + 1;
+          }
           break;
         default:
           break;
       }
     }
 
+    void incrementarContador(StatsJugador jugador, String? clave) {
+      if (clave == null || clave.isEmpty) return;
+      jugador.contadores[clave] = (jugador.contadores[clave] ?? 0) + 1;
+    }
+
+    final nombreAccion = accion ??
+        mapaAcciones[categoria ?? '']?.estadisticaPrincipal ??
+        categoria;
+    incrementarContador(jugador, nombreAccion);
+
     switch (categoria) {
       case 'Gol':
         jugador.lanzamientosTotales++;
         jugador.golesTotales++;
+        incrementarContador(jugador, 'Gol');
         cuentaZona(true);
         break;
       case 'Lanzamiento':
       case 'Lanzamiento Fallado':
       case 'Bloqueo':
         jugador.lanzamientosTotales++;
+        incrementarContador(jugador, 'Lanzamiento');
         cuentaZona(false);
         break;
       case 'Gol Encajado':
         jugador.lanzamientosRecibidos++;
         jugador.golesEncajados++;
+        incrementarContador(jugador, 'Gol Encajado');
         break;
       case 'Parada':
         jugador.lanzamientosRecibidos++;
         jugador.paradas++;
+        incrementarContador(jugador, 'Parada');
         break;
       case 'Lanzamiento Recibido':
         jugador.lanzamientosRecibidos++;
         break;
       case 'Perdida':
         jugador.perdidas++;
+        incrementarContador(jugador, 'Perdida Posesión');
         break;
       case 'Recuperación':
         jugador.recuperaciones++;
+        incrementarContador(jugador, 'Recuperación Posesión');
         break;
       case 'Falta':
         jugador.golpesCometidos++;
+        incrementarContador(jugador, 'Golpe cometido');
         break;
       case 'Falta Provocada':
         jugador.golpesProvocados++;
+        incrementarContador(jugador, 'Golpe provocado');
         break;
       case '2 minutos':
         jugador.exclusiones2m++;
+        incrementarContador(jugador, '2 minutos');
         break;
       case 'Amarilla':
         jugador.amarillas++;
+        incrementarContador(jugador, 'Tarjeta Amarilla');
         break;
       case 'Roja':
         jugador.rojas++;
+        incrementarContador(jugador, 'Tarjeta Roja');
         break;
       case 'Azul':
         jugador.azules++;
+        incrementarContador(jugador, 'Tarjeta Azul');
         break;
     }
   }
