@@ -269,36 +269,51 @@ class _EstadisticasStreamsState extends State<_EstadisticasStreams> {
           return const Center(child: CircularProgressIndicator());
         }
 
-        final stats = calcularEstadisticasPartidoDesdeEstadisticas(
-          partidoData: widget.partidoData,
-          estadisticasSnapshot: _lastEstadisticasSnapshot!,
-        );
+        return FutureBuilder<PartidoStats>(
+          future: calcularEstadisticasPartidoDesdeEstadisticas(
+            partidoData: widget.partidoData,
+            estadisticasSnapshot: _lastEstadisticasSnapshot!,
+          ),
+          builder: (context, statsSnapshot) {
+            if (statsSnapshot.hasError) {
+              return Center(
+                child: Text('Error: ${statsSnapshot.error}'),
+              );
+            }
 
-        return TabBarView(
-          children: [
-            _EquipoStatsTab(
-              equipoId: widget.equipoLocalId,
-              nombreEquipo: widget.equipoLocalNombre,
-              stats: stats,
-              mapaConvocados: widget.mapaLocalPorDorsal,
-              convocados: widget.convocadosLocal,
-              tiemposJugados: widget.tiemposJugados,
-              scrollController: widget.scrollLocal,
-              horizontalController: widget.scrollHorizontalLocal,
-              esLocal: true,
-            ),
-            _EquipoStatsTab(
-              equipoId: widget.equipoVisitanteId,
-              nombreEquipo: widget.equipoVisitanteNombre,
-              stats: stats,
-              mapaConvocados: widget.mapaVisitantePorDorsal,
-              convocados: widget.convocadosVisitante,
-              tiemposJugados: widget.tiemposJugados,
-              scrollController: widget.scrollVisit,
-              horizontalController: widget.scrollHorizontalVisit,
-              esLocal: false,
-            ),
-          ],
+            if (!statsSnapshot.hasData) {
+              return const Center(child: CircularProgressIndicator());
+            }
+
+            final stats = statsSnapshot.data!;
+
+            return TabBarView(
+              children: [
+                _EquipoStatsTab(
+                  equipoId: widget.equipoLocalId,
+                  nombreEquipo: widget.equipoLocalNombre,
+                  stats: stats,
+                  mapaConvocados: widget.mapaLocalPorDorsal,
+                  convocados: widget.convocadosLocal,
+                  tiemposJugados: widget.tiemposJugados,
+                  scrollController: widget.scrollLocal,
+                  horizontalController: widget.scrollHorizontalLocal,
+                  esLocal: true,
+                ),
+                _EquipoStatsTab(
+                  equipoId: widget.equipoVisitanteId,
+                  nombreEquipo: widget.equipoVisitanteNombre,
+                  stats: stats,
+                  mapaConvocados: widget.mapaVisitantePorDorsal,
+                  convocados: widget.convocadosVisitante,
+                  tiemposJugados: widget.tiemposJugados,
+                  scrollController: widget.scrollVisit,
+                  horizontalController: widget.scrollHorizontalVisit,
+                  esLocal: false,
+                ),
+              ],
+            );
+          },
         );
       },
     );
@@ -371,113 +386,12 @@ class _EquipoStatsTabState extends State<_EquipoStatsTab>
     return '${m.toString().padLeft(2, '0')}:${s.toString().padLeft(2, '0')}';
   }
 
-  int? _resumenGolesContra(ResumenEquipo resumen) {
-    try {
-      return (resumen as dynamic).golesContraTotales as int?;
-    } catch (_) {}
-    try {
-      return (resumen as dynamic).golesContra as int?;
-    } catch (_) {}
-    try {
-      return (resumen as dynamic).golesEncajados as int?;
-    } catch (_) {}
-    return null;
+  int _contadorJugador(StatsJugador jugador, String clave) {
+    return jugador.contadores[clave] ?? 0;
   }
 
-  int? _resumenGolpesCometidos(ResumenEquipo resumen) {
-    try {
-      return (resumen as dynamic).golpesCometidos as int?;
-    } catch (_) {
-      return null;
-    }
-  }
-
-  int? _resumenGolpesProvocados(ResumenEquipo resumen) {
-    try {
-      return (resumen as dynamic).golpesProvocados as int?;
-    } catch (_) {
-      return null;
-    }
-  }
-
-  int? _resumenAsistencias(ResumenEquipo resumen) {
-    try {
-      return (resumen as dynamic).asistencias as int?;
-    } catch (_) {
-      return null;
-    }
-  }
-
-  int? _resumenParadas(ResumenEquipo resumen) {
-    try {
-      return (resumen as dynamic).paradas as int?;
-    } catch (_) {
-      return null;
-    }
-  }
-
-  int? _resumenGolesEncajados(ResumenEquipo resumen) {
-    try {
-      return (resumen as dynamic).golesEncajados as int?;
-    } catch (_) {
-      return null;
-    }
-  }
-
-  int? _asistenciasJugador(StatsJugador jugador) {
-    try {
-      return (jugador as dynamic).asistencias as int?;
-    } catch (_) {
-      return null;
-    }
-  }
-
-  int? _perdidasPosesionJugador(StatsJugador jugador) {
-    try {
-      return (jugador as dynamic).perdidasPosesion as int?;
-    } catch (_) {
-      return null;
-    }
-  }
-
-  int? _recuperacionesPosesionJugador(StatsJugador jugador) {
-    try {
-      return (jugador as dynamic).recuperacionesPosesion as int?;
-    } catch (_) {
-      return null;
-    }
-  }
-
-  int? _lineasJugador(StatsJugador jugador) {
-    try {
-      return (jugador as dynamic).lineas as int?;
-    } catch (_) {
-      return null;
-    }
-  }
-
-  int? _paradasJugador(StatsJugador jugador) {
-    try {
-      return (jugador as dynamic).paradas as int?;
-    } catch (_) {
-      return null;
-    }
-  }
-
-  int? _paradas7mJugador(StatsJugador jugador) {
-    try {
-      return (jugador as dynamic).paradas7m as int?;
-    } catch (_) {
-      return null;
-    }
-  }
-
-  int? _golesEncajadosJugador(StatsJugador jugador) {
-    try {
-      return (jugador as dynamic).golesEncajados as int?;
-    } catch (_) {
-      return null;
-    }
+  int _contadorResumen(ResumenEquipo resumen, String clave) {
+    return resumen.contadores[clave] ?? 0;
   }
 
   @override
@@ -572,50 +486,59 @@ class _EquipoStatsTabState extends State<_EquipoStatsTab>
                         value: '${resumen.goles7m}/${resumen.lanzamientos7m}',
                       ),
                       _ResumenChip(
+                        label: 'Línea',
+                        value: _contadorResumen(resumen, 'Linea').toString(),
+                      ),
+                      _ResumenChip(
                           label: 'Perdidas',
-                          value: resumen.perdidas.toString()),
+                          value:
+                              _contadorResumen(resumen, 'Perdida Posesión')
+                                  .toString()),
                       _ResumenChip(
                           label: 'Recup.',
-                          value: resumen.recuperaciones.toString()),
+                          value:
+                              _contadorResumen(resumen, 'Recuperación Posesión')
+                                  .toString()),
                       _ResumenChip(
-                          label: "2'", value: resumen.exclusiones2m.toString()),
+                        label: "2'",
+                        value: _contadorResumen(resumen, '2 minutos')
+                            .toString(),
+                      ),
                       _ResumenChip(
                           label: 'Amarillas',
-                          value: resumen.amarillas.toString()),
+                          value: _contadorResumen(resumen, 'Tarjeta Amarilla')
+                              .toString()),
                       _ResumenChip(
-                          label: 'Rojas', value: resumen.rojas.toString()),
+                          label: 'Rojas',
+                          value:
+                              _contadorResumen(resumen, 'Tarjeta Roja').toString()),
                       _ResumenChip(
-                          label: 'Azules', value: resumen.azules.toString()),
-                      if (_resumenGolesContra(resumen) != null)
-                        _ResumenChip(
-                          label: 'Goles Contra',
-                          value: _resumenGolesContra(resumen).toString(),
-                        ),
-                      if (_resumenAsistencias(resumen) != null)
-                        _ResumenChip(
-                          label: 'Asist.',
-                          value: _resumenAsistencias(resumen).toString(),
-                        ),
-                      if (_resumenGolpesCometidos(resumen) != null)
-                        _ResumenChip(
-                          label: 'Golpes',
-                          value: _resumenGolpesCometidos(resumen).toString(),
-                        ),
-                      if (_resumenGolpesProvocados(resumen) != null)
-                        _ResumenChip(
-                          label: 'Prov.G',
-                          value: _resumenGolpesProvocados(resumen).toString(),
-                        ),
-                      if (_resumenParadas(resumen) != null)
-                        _ResumenChip(
-                          label: 'Paradas',
-                          value: _resumenParadas(resumen).toString(),
-                        ),
-                      if (_resumenGolesEncajados(resumen) != null)
-                        _ResumenChip(
-                          label: 'G.Encaj',
-                          value: _resumenGolesEncajados(resumen).toString(),
-                        ),
+                          label: 'Azules',
+                          value:
+                              _contadorResumen(resumen, 'Tarjeta Azul').toString()),
+                      _ResumenChip(
+                        label: 'Asist.',
+                        value: _contadorResumen(resumen, 'Asistencia').toString(),
+                      ),
+                      _ResumenChip(
+                        label: 'Golpes',
+                        value:
+                            _contadorResumen(resumen, 'Golpe cometido').toString(),
+                      ),
+                      _ResumenChip(
+                        label: 'Prov.G',
+                        value:
+                            _contadorResumen(resumen, 'Golpe provocado').toString(),
+                      ),
+                      _ResumenChip(
+                        label: 'Paradas',
+                        value: _contadorResumen(resumen, 'Parada').toString(),
+                      ),
+                      _ResumenChip(
+                        label: 'G.Encaj',
+                        value:
+                            _contadorResumen(resumen, 'Gol Encajado').toString(),
+                      ),
                     ],
                   ),
                 ],
@@ -697,6 +620,26 @@ class _EquipoStatsTabState extends State<_EquipoStatsTab>
                         controller: _horizontalControllerParaJugador(p.dorsal),
                         child: Row(
                           children: () {
+                            final perdidas =
+                                _contadorJugador(p, 'Perdida Posesión');
+                            final recuperaciones =
+                                _contadorJugador(p, 'Recuperación Posesión');
+                            final golpesCometidos =
+                                _contadorJugador(p, 'Golpe cometido');
+                            final golpesProvocados =
+                                _contadorJugador(p, 'Golpe provocado');
+                            final asistencias =
+                                _contadorJugador(p, 'Asistencia');
+                            final lineas = _contadorJugador(p, 'Linea');
+                            final exclusiones = _contadorJugador(p, '2 minutos');
+                            final amarillas =
+                                _contadorJugador(p, 'Tarjeta Amarilla');
+                            final rojas = _contadorJugador(p, 'Tarjeta Roja');
+                            final azules = _contadorJugador(p, 'Tarjeta Azul');
+                            final paradas = _contadorJugador(p, 'Parada');
+                            final golesEncajados =
+                                _contadorJugador(p, 'Gol Encajado');
+
                             final chips = <Widget>[
                               _StatChip(
                                 label: 'Tiempo',
@@ -724,124 +667,65 @@ class _EquipoStatsTabState extends State<_EquipoStatsTab>
                                 value: '${p.goles7m}/${p.lanzamientos7m}',
                               ),
                               _StatChip(
+                                label: 'Línea',
+                                value: '$lineas',
+                              ),
+                              _StatChip(
                                 label: 'Perd',
-                                value: '${p.perdidas}',
+                                value: '$perdidas',
                               ),
                               _StatChip(
                                 label: 'Rec',
-                                value: '${p.recuperaciones}',
+                                value: '$recuperaciones',
                               ),
                               _StatChip(
                                 label: 'Golpe',
-                                value: '${p.golpesCometidos}',
+                                value: '$golpesCometidos',
                               ),
                               _StatChip(
                                 label: 'Prov.G',
-                                value: '${p.golpesProvocados}',
+                                value: '$golpesProvocados',
+                              ),
+                              _StatChip(
+                                label: 'Asist.',
+                                value: '$asistencias',
+                              ),
+                              _StatChip(
+                                label: "2'",
+                                value: '$exclusiones',
+                              ),
+                              _StatChip(
+                                label: '🟨',
+                                value: '$amarillas',
+                              ),
+                              _StatChip(
+                                label: '🟥',
+                                value: '$rojas',
+                              ),
+                              _StatChip(
+                                label: '🟦',
+                                value: '$azules',
                               ),
                             ];
 
-                            final asistencias = _asistenciasJugador(p);
-                            if (asistencias != null) {
-                              chips.add(
-                                _StatChip(
-                                  label: 'Asist.',
-                                  value: '$asistencias',
-                                ),
-                              );
-                            }
-
-                            final golesEncajados = _golesEncajadosJugador(p);
-                            if (golesEncajados != null && esPortero) {
-                              chips.add(
-                                _StatChip(
-                                  label: 'G.Encaj',
-                                  value: '$golesEncajados',
-                                ),
-                              );
-                            }
-
-                            final paradas = _paradasJugador(p);
-                            if (paradas != null && esPortero) {
-                              chips.add(
+                            if (esPortero) {
+                              chips.addAll([
                                 _StatChip(
                                   label: 'Paradas',
                                   value: '$paradas',
                                 ),
-                              );
-
-                              final paradas7m = _paradas7mJugador(p);
-                              if (paradas7m != null) {
-                                chips.add(
-                                  _StatChip(
-                                    label: 'Par.7m',
-                                    value: '$paradas7m',
-                                  ),
-                                );
-                              }
-
-                              chips.add(
+                                _StatChip(
+                                  label: 'G.Encaj',
+                                  value: '$golesEncajados',
+                                ),
                                 _StatChip(
                                   label: '%Par',
                                   value: p.lanzamientosRecibidos > 0
                                       ? '${(paradas * 100 / p.lanzamientosRecibidos).toStringAsFixed(1)}%'
                                       : '0%',
                                 ),
-                              );
+                              ]);
                             }
-
-                            final perdidasPosesion = _perdidasPosesionJugador(p);
-                            if (perdidasPosesion != null) {
-                              chips.add(
-                                _StatChip(
-                                  label: 'Perd.P',
-                                  value: '$perdidasPosesion',
-                                ),
-                              );
-                            }
-
-                            final recuperacionesPosesion =
-                                _recuperacionesPosesionJugador(p);
-                            if (recuperacionesPosesion != null) {
-                              chips.add(
-                                _StatChip(
-                                  label: 'Rec.P',
-                                  value: '$recuperacionesPosesion',
-                                ),
-                              );
-                            }
-
-                            final lineas = _lineasJugador(p);
-                            if (lineas != null) {
-                              chips.add(
-                                _StatChip(
-                                  label: 'Línea',
-                                  value: '$lineas',
-                                ),
-                              );
-                            }
-
-                            chips.add(
-                              _StatChip(
-                                label: "2'",
-                                value: '${p.exclusiones2m}',
-                              ),
-                            );
-
-                            chips.addAll([
-                              _StatChip(
-                                label: '🟨',
-                                value: '${p.amarillas}',
-                              ),
-                              _StatChip(
-                                label: '🟥',
-                                value: '${p.rojas}',
-                              ),
-                              _StatChip(
-                                label: '🟦',
-                                value: '${p.azules}',
-                              ),
-                            ]);
 
                             return chips;
                           }(),
