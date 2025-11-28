@@ -43,7 +43,7 @@ Future<void> registrarEstadisticasDesdeAccion(
     required String accion,
   }) {
     final docRef = statsRef.doc();
-    batch.set(docRef, {
+    final data = <String, dynamic>{
       'accion': accion,
       'categoria': categoria,
       'equipoId': equipoId,
@@ -52,9 +52,14 @@ Future<void> registrarEstadisticasDesdeAccion(
       'periodo': periodoActual,
       'segundoPartido': segundoActual,
       'zonaJuego': zonaDeJuego,
-      'zonaPorteria': zonaPorteria ?? FieldValue.delete(),
       'zona': zonaDeJuego,
-    });
+    };
+
+    if (zonaPorteria != null && zonaPorteria!.isNotEmpty) {
+      data['zonaPorteria'] = zonaPorteria;
+    }
+
+    batch.set(docRef, data);
   }
 
   addStat(
