@@ -482,6 +482,18 @@ class _EquipoStatsTabState extends State<_EquipoStatsTab>
                             '${(resumen.porcentajeAcierto * 100).toStringAsFixed(1)}%',
                       ),
                       _ResumenChip(
+                        label: '6m',
+                        value: '${resumen.goles6m}/${resumen.lanzamientos6m}',
+                      ),
+                      _ResumenChip(
+                        label: '8m',
+                        value: '${resumen.goles8m}/${resumen.lanzamientos8m}',
+                      ),
+                      _ResumenChip(
+                        label: '9m',
+                        value: '${resumen.goles9m}/${resumen.lanzamientos9m}',
+                      ),
+                      _ResumenChip(
                         label: '7m',
                         value: '${resumen.goles7m}/${resumen.lanzamientos7m}',
                       ),

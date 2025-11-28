@@ -129,6 +129,12 @@ class StatsJugador {
 class ResumenEquipo {
   int lanzamientosTotales = 0;
   int golesTotales = 0;
+  int lanzamientos6m = 0;
+  int goles6m = 0;
+  int lanzamientos8m = 0;
+  int goles8m = 0;
+  int lanzamientos9m = 0;
+  int goles9m = 0;
   int lanzamientos7m = 0;
   int goles7m = 0;
   int perdidas = 0;
@@ -170,6 +176,12 @@ class PartidoStats {
     for (final p in jugadoresDeEquipo(equipoId)) {
       resumen.lanzamientosTotales += p.lanzamientosTotales;
       resumen.golesTotales += p.golesTotales;
+      resumen.lanzamientos6m += p.lanzamientos6m;
+      resumen.goles6m += p.goles6m;
+      resumen.lanzamientos8m += p.lanzamientos8m;
+      resumen.goles8m += p.goles8m;
+      resumen.lanzamientos9m += p.lanzamientos9m;
+      resumen.goles9m += p.goles9m;
       resumen.lanzamientos7m += p.lanzamientos7m;
       resumen.goles7m += p.goles7m;
       resumen.perdidas += p.perdidas;
