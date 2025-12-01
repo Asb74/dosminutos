@@ -11,6 +11,98 @@ import 'estadisticas_partido_screen.dart';
 import '../widgets/sanciones_widgets.dart';
 import '../services/registro_estadisticas_service.dart';
 
+class PistaHandballView extends StatelessWidget {
+  const PistaHandballView({
+    Key? key,
+    required this.child,
+  }) : super(key: key);
+
+  final Widget child;
+
+  // relación de aspecto real de la imagen pista_handball.png
+  static const double aspectRatio = 534 / 400;
+
+  @override
+  Widget build(BuildContext context) {
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final maxWidth = constraints.maxWidth;
+        final maxHeight = constraints.maxHeight * 0.6; // como mucho 60% de la altura
+
+        double width = maxWidth;
+        double height = width / aspectRatio;
+
+        if (height > maxHeight) {
+          height = maxHeight;
+          width = height * aspectRatio;
+        }
+
+        return Center(
+          child: SizedBox(
+            width: width,
+            height: height,
+            child: InteractiveViewer(
+              minScale: 0.8,
+              maxScale: 3.0,
+              boundaryMargin: const EdgeInsets.all(40),
+              child: AspectRatio(
+                aspectRatio: aspectRatio,
+                child: child,
+              ),
+            ),
+          ),
+        );
+      },
+    );
+  }
+}
+
+class PorteriaHandballView extends StatelessWidget {
+  const PorteriaHandballView({
+    Key? key,
+    required this.child,
+  }) : super(key: key);
+
+  final Widget child;
+
+  // relación de aspecto real de porteria_zonas.png
+  static const double aspectRatio = 541 / 403;
+
+  @override
+  Widget build(BuildContext context) {
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final maxWidth = constraints.maxWidth;
+        final maxHeight = constraints.maxHeight * 0.4; // la portería puede ser más baja
+
+        double width = maxWidth;
+        double height = width / aspectRatio;
+
+        if (height > maxHeight) {
+          height = maxHeight;
+          width = height * aspectRatio;
+        }
+
+        return Center(
+          child: SizedBox(
+            width: width,
+            height: height,
+            child: InteractiveViewer(
+              minScale: 0.8,
+              maxScale: 3.0,
+              boundaryMargin: const EdgeInsets.all(40),
+              child: AspectRatio(
+                aspectRatio: aspectRatio,
+                child: child,
+              ),
+            ),
+          ),
+        );
+      },
+    );
+  }
+}
+
 class PorteriaGridSelector extends StatelessWidget {
   const PorteriaGridSelector({
     Key? key,
@@ -29,8 +121,7 @@ class PorteriaGridSelector extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return AspectRatio(
-      aspectRatio: 541 / 403,
+    return PorteriaHandballView(
       child: LayoutBuilder(
         builder: (context, constraints) {
           final width = constraints.maxWidth;
@@ -1652,8 +1743,7 @@ class _ZonaLanzamientoSelectorState extends State<ZonaLanzamientoSelector> {
 
   @override
   Widget build(BuildContext context) {
-    return AspectRatio(
-      aspectRatio: 534 / 400,
+    return PistaHandballView(
       child: LayoutBuilder(
         builder: (context, constraints) {
           final width = constraints.maxWidth;
