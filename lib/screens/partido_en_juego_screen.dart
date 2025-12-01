@@ -29,53 +29,49 @@ class PorteriaGridSelector extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        final width = constraints.maxWidth;
-        final height = constraints.maxHeight;
+    return AspectRatio(
+      aspectRatio: 541 / 403,
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          final width = constraints.maxWidth;
+          final height = constraints.maxHeight;
 
-        return SizedBox(
-          width: width,
-          height: height,
-          child: Stack(
+          return Stack(
+            fit: StackFit.expand,
             children: [
-              Positioned.fill(
-                child: ClipRRect(
-                  borderRadius: BorderRadius.circular(12),
-                  child: Image.asset(
-                    'assets/pista/porteria_zonas.png',
-                    fit: BoxFit.cover,
-                  ),
+              ClipRRect(
+                borderRadius: BorderRadius.circular(12),
+                child: Image.asset(
+                  'assets/pista/porteria_zonas.png',
+                  fit: BoxFit.contain,
                 ),
               ),
-              Positioned.fill(
-                child: GestureDetector(
-                  behavior: HitTestBehavior.opaque,
-                  onTapDown: (details) {
-                    final localPos = details.localPosition;
-                    final rowHeight = height / 3;
-                    final colWidth = width / 3;
+              GestureDetector(
+                behavior: HitTestBehavior.opaque,
+                onTapDown: (details) {
+                  final localPos = details.localPosition;
+                  final rowHeight = height / 3;
+                  final colWidth = width / 3;
 
-                    final rowIndex =
-                        (localPos.dy / rowHeight).floor().clamp(0, 2);
-                    final colIndex =
-                        (localPos.dx / colWidth).floor().clamp(0, 2);
+                  final rowIndex =
+                      (localPos.dy / rowHeight).floor().clamp(0, 2);
+                  final colIndex =
+                      (localPos.dx / colWidth).floor().clamp(0, 2);
 
-                    final codigo = _cuadrantes[rowIndex][colIndex];
-                    onCuadranteSelected(codigo);
-                  },
-                  child: CustomPaint(
-                    painter: _PorteriaGridPainter(
-                      cuadranteSeleccionado: cuadranteSeleccionado,
-                      cuadrantes: _cuadrantes,
-                    ),
+                  final codigo = _cuadrantes[rowIndex][colIndex];
+                  onCuadranteSelected(codigo);
+                },
+                child: CustomPaint(
+                  painter: _PorteriaGridPainter(
+                    cuadranteSeleccionado: cuadranteSeleccionado,
+                    cuadrantes: _cuadrantes,
                   ),
                 ),
               ),
             ],
-          ),
-        );
-      },
+          );
+        },
+      ),
     );
   }
 }
@@ -1350,12 +1346,9 @@ class _PartidoEnJuegoScreenState extends State<PartidoEnJuegoScreen> {
                       ? Column(
                           key: const ValueKey('porteria'),
                           children: [
-                            SizedBox(
-                              height: 260,
-                              child: PorteriaGridSelector(
-                                cuadranteSeleccionado: _zonaPorteria,
-                                onCuadranteSelected: _onSeleccionPorteria,
-                              ),
+                            PorteriaGridSelector(
+                              cuadranteSeleccionado: _zonaPorteria,
+                              onCuadranteSelected: _onSeleccionPorteria,
                             ),
                             const SizedBox(height: 8),
                             const Text(
@@ -1399,12 +1392,9 @@ class _PartidoEnJuegoScreenState extends State<PartidoEnJuegoScreen> {
                                   ? Column(
                                       key: const ValueKey('zonas'),
                                       children: [
-                                        SizedBox(
-                                          height: 260,
-                                          child: ZonaLanzamientoSelector(
-                                            zonaSeleccionada: _zonaCampo,
-                                            onZonaSelected: _seleccionarZonaCampo,
-                                          ),
+                                        ZonaLanzamientoSelector(
+                                          zonaSeleccionada: _zonaCampo,
+                                          onZonaSelected: _seleccionarZonaCampo,
                                         ),
                                         const SizedBox(height: 8),
                                         Text(
@@ -1662,49 +1652,49 @@ class _ZonaLanzamientoSelectorState extends State<ZonaLanzamientoSelector> {
 
   @override
   Widget build(BuildContext context) {
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        final width = constraints.maxWidth;
-        final height = constraints.maxHeight > 0 ? constraints.maxHeight : width * 0.7;
-        return SizedBox(
-          width: width,
-          height: height,
-          child: Stack(
+    return AspectRatio(
+      aspectRatio: 534 / 400,
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          final width = constraints.maxWidth;
+          final height = constraints.maxHeight;
+          return Stack(
+            fit: StackFit.expand,
             children: [
-              Positioned.fill(
-                child: ClipRRect(
-                  borderRadius: BorderRadius.circular(12),
-                  child: Image.asset(
-                    'assets/pista/pista_handball.png',
-                    fit: BoxFit.cover,
-                  ),
+              ClipRRect(
+                borderRadius: BorderRadius.circular(12),
+                child: Image.asset(
+                  'assets/pista/pista_handball.png',
+                  fit: BoxFit.contain,
                 ),
               ),
-              Positioned.fill(
-                child: GestureDetector(
-                  behavior: HitTestBehavior.opaque,
-                  onTapDown: (details) {
-                    final localPosition = details.localPosition;
-                    final rowHeight = height / _zonas.length;
-                    final rowIndex = (localPosition.dy / rowHeight).clamp(0, _zonas.length - 1).floor();
-                    final columnas = _zonas[rowIndex].length;
-                    final colWidth = width / columnas;
-                    final colIndex = (localPosition.dx / colWidth).clamp(0, columnas - 1).floor();
-                    final zona = _zonas[rowIndex][colIndex];
-                    widget.onZonaSelected(zona);
-                  },
-                  child: CustomPaint(
-                    painter: _ZonaGridPainter(
-                      zonas: _zonas,
-                      selected: widget.zonaSeleccionada,
-                    ),
+              GestureDetector(
+                behavior: HitTestBehavior.opaque,
+                onTapDown: (details) {
+                  final localPosition = details.localPosition;
+                  final rowHeight = height / _zonas.length;
+                  final rowIndex = (localPosition.dy / rowHeight)
+                      .clamp(0, _zonas.length - 1)
+                      .floor();
+                  final columnas = _zonas[rowIndex].length;
+                  final colWidth = width / columnas;
+                  final colIndex = (localPosition.dx / colWidth)
+                      .clamp(0, columnas - 1)
+                      .floor();
+                  final zona = _zonas[rowIndex][colIndex];
+                  widget.onZonaSelected(zona);
+                },
+                child: CustomPaint(
+                  painter: _ZonaGridPainter(
+                    zonas: _zonas,
+                    selected: widget.zonaSeleccionada,
                   ),
                 ),
               ),
             ],
-          ),
-        );
-      },
+          );
+        },
+      ),
     );
   }
 }
