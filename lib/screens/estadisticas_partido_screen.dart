@@ -246,6 +246,7 @@ class _EstadisticasStreams extends StatefulWidget {
 
 class _EstadisticasStreamsState extends State<_EstadisticasStreams> {
   QuerySnapshot<Map<String, dynamic>>? _lastEstadisticasSnapshot;
+  QuerySnapshot<Map<String, dynamic>>? _lastSancionesSnapshot;
 
   @override
   Widget build(BuildContext context) {
@@ -269,49 +270,72 @@ class _EstadisticasStreamsState extends State<_EstadisticasStreams> {
           return const Center(child: CircularProgressIndicator());
         }
 
-        return FutureBuilder<PartidoStats>(
-          future: calcularEstadisticasPartidoDesdeEstadisticas(
-            partidoData: widget.partidoData,
-            estadisticasSnapshot: _lastEstadisticasSnapshot!,
-          ),
-          builder: (context, statsSnapshot) {
-            if (statsSnapshot.hasError) {
-              return Center(
-                child: Text('Error: ${statsSnapshot.error}'),
-              );
+        return StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
+          stream: FirebaseFirestore.instance
+              .collection('ActaPartido')
+              .doc(widget.partidoId)
+              .collection('Sanciones')
+              .orderBy('timestamp')
+              .snapshots(),
+          builder: (context, sancionesSnapshot) {
+            if (sancionesSnapshot.hasError) {
+              return Center(child: Text('Error: ${sancionesSnapshot.error}'));
             }
 
-            if (!statsSnapshot.hasData) {
+            if (sancionesSnapshot.hasData && sancionesSnapshot.data != null) {
+              _lastSancionesSnapshot = sancionesSnapshot.data;
+            }
+
+            if (_lastSancionesSnapshot == null) {
               return const Center(child: CircularProgressIndicator());
             }
 
-            final stats = statsSnapshot.data!;
+            return FutureBuilder<PartidoStats>(
+              future: calcularEstadisticasPartidoDesdeSnapshots(
+                partidoData: widget.partidoData,
+                datosSnapshot: _lastEstadisticasSnapshot!,
+                sancionesSnapshot: _lastSancionesSnapshot!,
+              ),
+              builder: (context, statsSnapshot) {
+                if (statsSnapshot.hasError) {
+                  return Center(
+                    child: Text('Error: ${statsSnapshot.error}'),
+                  );
+                }
 
-            return TabBarView(
-              children: [
-                _EquipoStatsTab(
-                  equipoId: widget.equipoLocalId,
-                  nombreEquipo: widget.equipoLocalNombre,
-                  stats: stats,
-                  mapaConvocados: widget.mapaLocalPorDorsal,
-                  convocados: widget.convocadosLocal,
-                  tiemposJugados: widget.tiemposJugados,
-                  scrollController: widget.scrollLocal,
-                  horizontalController: widget.scrollHorizontalLocal,
-                  esLocal: true,
-                ),
-                _EquipoStatsTab(
-                  equipoId: widget.equipoVisitanteId,
-                  nombreEquipo: widget.equipoVisitanteNombre,
-                  stats: stats,
-                  mapaConvocados: widget.mapaVisitantePorDorsal,
-                  convocados: widget.convocadosVisitante,
-                  tiemposJugados: widget.tiemposJugados,
-                  scrollController: widget.scrollVisit,
-                  horizontalController: widget.scrollHorizontalVisit,
-                  esLocal: false,
-                ),
-              ],
+                if (!statsSnapshot.hasData) {
+                  return const Center(child: CircularProgressIndicator());
+                }
+
+                final stats = statsSnapshot.data!;
+
+                return TabBarView(
+                  children: [
+                    _EquipoStatsTab(
+                      equipoId: widget.equipoLocalId,
+                      nombreEquipo: widget.equipoLocalNombre,
+                      stats: stats,
+                      mapaConvocados: widget.mapaLocalPorDorsal,
+                      convocados: widget.convocadosLocal,
+                      tiemposJugados: widget.tiemposJugados,
+                      scrollController: widget.scrollLocal,
+                      horizontalController: widget.scrollHorizontalLocal,
+                      esLocal: true,
+                    ),
+                    _EquipoStatsTab(
+                      equipoId: widget.equipoVisitanteId,
+                      nombreEquipo: widget.equipoVisitanteNombre,
+                      stats: stats,
+                      mapaConvocados: widget.mapaVisitantePorDorsal,
+                      convocados: widget.convocadosVisitante,
+                      tiemposJugados: widget.tiemposJugados,
+                      scrollController: widget.scrollVisit,
+                      horizontalController: widget.scrollHorizontalVisit,
+                      esLocal: false,
+                    ),
+                  ],
+                );
+              },
             );
           },
         );

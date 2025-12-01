@@ -198,9 +198,10 @@ class PartidoStats {
   }
 }
 
-Future<PartidoStats> calcularEstadisticasPartidoDesdeEstadisticas({
+Future<PartidoStats> calcularEstadisticasPartidoDesdeSnapshots({
   required Map<String, dynamic> partidoData,
-  required QuerySnapshot<Map<String, dynamic>> estadisticasSnapshot,
+  required QuerySnapshot<Map<String, dynamic>> datosSnapshot,
+  required QuerySnapshot<Map<String, dynamic>> sancionesSnapshot,
 }) async {
   final mapa = <String, StatsJugador>{};
   final stats = PartidoStats(mapa);
@@ -246,7 +247,22 @@ Future<PartidoStats> calcularEstadisticasPartidoDesdeEstadisticas({
     return statsJugador;
   }
 
-  for (final doc in estadisticasSnapshot.docs) {
+  void incrementarContador(StatsJugador jugador, String? clave) {
+    if (clave == null || clave.isEmpty) return;
+    jugador.contadores[clave] = (jugador.contadores[clave] ?? 0) + 1;
+  }
+
+  const accionesSancion = {
+    '2 minutos',
+    'Tarjeta Amarilla',
+    'Tarjeta Roja',
+    'Tarjeta Azul',
+    'Amarilla',
+    'Roja',
+    'Azul',
+  };
+
+  for (final doc in datosSnapshot.docs) {
     final data = doc.data();
     final String? equipoId = data['equipoId'] as String?;
     final int? dorsal = (data['dorsal'] as num?)?.toInt();
@@ -256,6 +272,10 @@ Future<PartidoStats> calcularEstadisticasPartidoDesdeEstadisticas({
     final zona = clasificarZona(zonaCampo);
 
     if (equipoId == null || dorsal == null || categoria == null) continue;
+
+    if (accionesSancion.contains(categoria) || accionesSancion.contains(accion)) {
+      continue;
+    }
 
     final jugador = obtenerStatsJugador(equipoId, dorsal);
 
@@ -306,11 +326,6 @@ Future<PartidoStats> calcularEstadisticasPartidoDesdeEstadisticas({
       }
     }
 
-    void incrementarContador(StatsJugador jugador, String? clave) {
-      if (clave == null || clave.isEmpty) return;
-      jugador.contadores[clave] = (jugador.contadores[clave] ?? 0) + 1;
-    }
-
     final nombreAccion = accion ??
         mapaAcciones[categoria ?? '']?.estadisticaPrincipal ??
         categoria;
@@ -359,18 +374,36 @@ Future<PartidoStats> calcularEstadisticasPartidoDesdeEstadisticas({
         jugador.golpesProvocados++;
         incrementarContador(jugador, 'Golpe provocado');
         break;
+    }
+  }
+
+  for (final doc in sancionesSnapshot.docs) {
+    final data = doc.data();
+    final String? equipoId = data['equipoId'] as String?;
+    final int? dorsal = (data['dorsal'] as num?)?.toInt();
+    final String? accion =
+        (data['accion'] as String?) ?? (data['tipo'] as String?);
+
+    if (equipoId == null || dorsal == null || accion == null) continue;
+
+    final jugador = obtenerStatsJugador(equipoId, dorsal);
+
+    switch (accion) {
       case '2 minutos':
         jugador.exclusiones2m++;
         incrementarContador(jugador, '2 minutos');
         break;
+      case 'Tarjeta Amarilla':
       case 'Amarilla':
         jugador.amarillas++;
         incrementarContador(jugador, 'Tarjeta Amarilla');
         break;
+      case 'Tarjeta Roja':
       case 'Roja':
         jugador.rojas++;
         incrementarContador(jugador, 'Tarjeta Roja');
         break;
+      case 'Tarjeta Azul':
       case 'Azul':
         jugador.azules++;
         incrementarContador(jugador, 'Tarjeta Azul');
