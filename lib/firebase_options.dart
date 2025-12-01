@@ -1,12 +1,10 @@
 import 'package:firebase_core/firebase_core.dart';
-import 'package:flutter/foundation.dart' show defaultTargetPlatform, kIsWeb, TargetPlatform;
+import 'package:flutter/foundation.dart'
+    show defaultTargetPlatform, kIsWeb, TargetPlatform;
 
-/// Placeholder Firebase configuration used to allow the application to compile
-/// even when the real configuration files have not been generated yet.
-///
-/// Replace the values in this file with the configuration obtained from the
-/// Firebase console or run `flutterfire configure` to generate the production
-/// values automatically.
+/// Configuración de Firebase para cada plataforma.
+/// Generado con `flutterfire configure` y adaptado para que
+/// Windows (y Linux) puedan usar la misma config que Android en desarrollo.
 class DefaultFirebaseOptions {
   static FirebaseOptions get currentPlatform {
     if (kIsWeb) {
@@ -20,11 +18,14 @@ class DefaultFirebaseOptions {
         return ios;
       case TargetPlatform.macOS:
         return macos;
+
+      /// 👇 Aquí es donde antes lanzaba UnsupportedError.
+      /// Para desarrollo usamos la config de Android también en Windows y Linux.
       case TargetPlatform.windows:
+        return android;
       case TargetPlatform.linux:
-        throw UnsupportedError(
-          'DefaultFirebaseOptions have not been configured for this platform.',
-        );
+        return android;
+
       default:
         throw UnsupportedError(
           'DefaultFirebaseOptions are not supported for this platform.',
@@ -67,5 +68,4 @@ class DefaultFirebaseOptions {
     storageBucket: 'minutos-5d44f.firebasestorage.app',
     iosBundleId: 'com.asb.dosminutos',
   );
-
 }
