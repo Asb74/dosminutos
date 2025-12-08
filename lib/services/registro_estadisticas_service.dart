@@ -16,6 +16,75 @@ const _accionesSancion = {
   'Azul',
 };
 
+/// Recupera la configuración de la acción y registra las estadísticas
+/// correspondientes para los dorsales principal y secundario (si aplica).
+Future<void> registrarEstadisticasDesdeAccion(
+  String accionSeleccionada,
+  String actaPartidoId,
+  String equipoIdPrincipal,
+  int dorsalPrincipal, {
+  String? equipoIdSecundario,
+  int? dorsalSecundario,
+  required String periodoActual,
+  required int segundoActual,
+  String? zonaDeJuego,
+  String? zonaPorteria,
+}) async {
+  final firestore = FirebaseFirestore.instance;
+  final accionSnap = await firestore
+      .collection('AccionEstadistica')
+      .doc(accionSeleccionada)
+      .get();
+  final dataAccion = accionSnap.data();
+
+  final categoria = (dataAccion?['Categoria'] as String?)?.trim();
+  final estadisticaPrincipal =
+      (dataAccion?['EstadisticaDorsalPrincipal'] as String?)?.trim();
+  final estadisticaSecundaria =
+      (dataAccion?['EstadisticaDorsalSecundario'] as String?)?.trim();
+
+  final categoriaFinal =
+      (categoria != null && categoria.isNotEmpty) ? categoria : accionSeleccionada;
+  final accionPrincipal = (estadisticaPrincipal != null &&
+          estadisticaPrincipal.isNotEmpty)
+      ? estadisticaPrincipal
+      : accionSeleccionada;
+  final accionSecundaria = (estadisticaSecundaria != null &&
+          estadisticaSecundaria.isNotEmpty)
+      ? estadisticaSecundaria
+      : accionSeleccionada;
+
+  // Registrar acción para el jugador principal
+  await registrarAccionPartido(
+    actaPartidoId: actaPartidoId,
+    equipoId: equipoIdPrincipal,
+    dorsal: dorsalPrincipal,
+    categoria: categoriaFinal,
+    accion: accionPrincipal,
+    periodoActual: periodoActual,
+    segundoPartido: segundoActual,
+    zonaJuego: zonaDeJuego,
+    zonaPorteria: zonaPorteria,
+  );
+
+  // Registrar acción para el jugador secundario solo si se proporciona
+  if (equipoIdSecundario != null && dorsalSecundario != null) {
+    await registrarAccionPartido(
+      actaPartidoId: actaPartidoId,
+      equipoId: equipoIdSecundario,
+      dorsal: dorsalSecundario,
+      categoria: categoriaFinal,
+      accion: accionSecundaria,
+      periodoActual: periodoActual,
+      segundoPartido: segundoActual,
+      zonaJuego: zonaDeJuego,
+      zonaPorteria: zonaPorteria,
+      equipoIdSecundario: equipoIdPrincipal,
+      dorsalSecundario: dorsalPrincipal,
+    );
+  }
+}
+
 /// Registra una acción de partido en Firestore.
 ///
 /// - Si la acción es sanción (2', amarilla, roja, azul…) se guarda en
