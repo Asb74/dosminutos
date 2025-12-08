@@ -10,6 +10,7 @@ import 'cambios_screen.dart';
 import 'estadisticas_partido_screen.dart';
 import '../widgets/sanciones_widgets.dart';
 import '../services/registro_estadisticas_service.dart';
+import '../services/puesto_color_service.dart';
 
 class PistaHandballView extends StatelessWidget {
   const PistaHandballView({
@@ -283,6 +284,8 @@ class _PartidoEnJuegoScreenState extends State<PartidoEnJuegoScreen> {
   List<Map<String, dynamic>> _jugadoresLocal = [];
   List<Map<String, dynamic>> _jugadoresVisitante = [];
   bool _sancionesCargadas = false;
+  Map<String, Color> _coloresPorPuesto = {};
+  final Color _colorPorDefectoPuesto = Colors.grey.shade300;
 
   String _keySancion(String equipoId, int dorsal) => '$equipoId#$dorsal';
   String _keyJugador(String equipoId, int dorsal) => '$equipoId#$dorsal';
@@ -297,10 +300,44 @@ class _PartidoEnJuegoScreenState extends State<PartidoEnJuegoScreen> {
     return _estadoSanciones[key];
   }
 
+  Future<void> _cargarColoresPuesto() async {
+    final mapa = await cargarMapaColoresPuesto();
+    if (mounted) {
+      setState(() {
+        _coloresPorPuesto = mapa;
+      });
+    }
+  }
+
+  String? _puestoDeJugador(Map<String, dynamic> jugador) {
+    final puestoAtaque = (jugador['posicionAtaque'] as String?)?.trim();
+    if (puestoAtaque != null && puestoAtaque.isNotEmpty) {
+      return puestoAtaque;
+    }
+    final posicion = (jugador['posicion'] as String?)?.trim();
+    if (posicion != null && posicion.isNotEmpty) {
+      return posicion;
+    }
+    return null;
+  }
+
+  Color _colorDeJugador(Map<String, dynamic> jugador) {
+    final puesto = _puestoDeJugador(jugador);
+    if (puesto == null) return _colorPorDefectoPuesto;
+    return _coloresPorPuesto[puesto] ?? _colorPorDefectoPuesto;
+  }
+
+  Color _textoParaColor(Color fondo) {
+    return ThemeData.estimateBrightnessForColor(fondo) == Brightness.dark
+        ? Colors.white
+        : Colors.black87;
+  }
+
   @override
   void initState() {
     super.initState();
     WakelockPlus.enable();
+    _cargarColoresPuesto();
   }
 
   @override
@@ -1465,6 +1502,8 @@ class _PartidoEnJuegoScreenState extends State<PartidoEnJuegoScreen> {
                               accionSeleccionada: _accionSeleccionada,
                               nombreEquipoLocal: partidoActual.equipoLocalNombre,
                               nombreEquipoVisitante: partidoActual.equipoVisitanteNombre,
+                              coloresPorPuesto: _coloresPorPuesto,
+                              colorPorDefecto: _colorPorDefectoPuesto,
                               onJugadorSeleccionado: (equipo, dorsal) async {
                                 await _onDorsalSecundarioSeleccionado(equipo, dorsal);
                               },
@@ -1506,6 +1545,8 @@ class _PartidoEnJuegoScreenState extends State<PartidoEnJuegoScreen> {
                   seleccionadoDorsal: _dorsalPrincipal,
                   esperandoSecundario: _esperandoJugadorSecundario,
                   equipoClave: 'local',
+                  coloresPorPuesto: _coloresPorPuesto,
+                  colorPorDefecto: _colorPorDefectoPuesto,
                   onTap: _seleccionarJugadorSecundario,
                   getSancionEstado: _getSancionDesdeClave,
                 ),
@@ -1517,6 +1558,8 @@ class _PartidoEnJuegoScreenState extends State<PartidoEnJuegoScreen> {
                   seleccionadoDorsal: _dorsalPrincipal,
                   esperandoSecundario: _esperandoJugadorSecundario,
                   equipoClave: 'visitante',
+                  coloresPorPuesto: _coloresPorPuesto,
+                  colorPorDefecto: _colorPorDefectoPuesto,
                   onTap: _seleccionarJugadorSecundario,
                   getSancionEstado: _getSancionDesdeClave,
                 ),
@@ -1861,6 +1904,8 @@ class _SeleccionarJugadorSecundarioPanel extends StatelessWidget {
     this.accionSeleccionada,
     required this.nombreEquipoLocal,
     required this.nombreEquipoVisitante,
+    required this.coloresPorPuesto,
+    required this.colorPorDefecto,
     required this.onJugadorSeleccionado,
     required this.getSancionEstado,
     Key? key,
@@ -1873,11 +1918,27 @@ class _SeleccionarJugadorSecundarioPanel extends StatelessWidget {
   final String? accionSeleccionada;
   final String nombreEquipoLocal;
   final String nombreEquipoVisitante;
+  final Map<String, Color> coloresPorPuesto;
+  final Color colorPorDefecto;
   final Future<void> Function(String equipo, int dorsal) onJugadorSeleccionado;
   final SancionEstado? Function(String equipoClave, int dorsal) getSancionEstado;
 
   @override
   Widget build(BuildContext context) {
+    Color colorParaJugador(Map<String, dynamic> jugador) {
+      final puesto = ((jugador['posicionAtaque'] as String?) ??
+              (jugador['posicion'] as String?) ??
+              '')
+          .trim();
+      if (puesto.isEmpty) return colorPorDefecto;
+      return coloresPorPuesto[puesto] ?? colorPorDefecto;
+    }
+
+    Color textoPara(Color fondo) =>
+        ThemeData.estimateBrightnessForColor(fondo) == Brightness.dark
+            ? Colors.white
+            : Colors.black87;
+
     Widget buildEquipo(String titulo, List<Map<String, dynamic>> jugadores, String equipoClave) {
       return Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -1896,20 +1957,17 @@ class _SeleccionarJugadorSecundarioPanel extends StatelessWidget {
 
               final esEquipoPrincipal = equipoClave == equipoPrincipal;
               final esDorsalPrincipal = esEquipoPrincipal && dorsalPrincipal == dorsal;
-              final esPortero =
-                  ((jugador['posicion'] as String?)?.toLowerCase() ?? '').contains('portero');
               final sancion = getSancionEstado(equipoClave, dorsal);
               final bool tiene2Activa = sancion?.tieneDosMinActiva ?? false;
               final bool expulsado = sancion?.expulsado ?? false;
-              final baseColor = esPortero
-                  ? Colors.lightBlue.shade200
-                  : Colors.amber.shade100;
+              final baseColor = colorParaJugador(jugador);
 
               final isDisabled =
                   (esEquipoPrincipal && !esDorsalPrincipal) || tiene2Activa || expulsado;
-              final color = isDisabled
-                  ? (esPortero ? baseColor : Colors.grey.shade300)
-                  : baseColor;
+              final color = isDisabled ? baseColor.withOpacity(0.35) : baseColor;
+              final textColor = textoPara(baseColor);
+              final displayTextColor =
+                  isDisabled ? textColor.withOpacity(0.6) : textColor;
 
               return GestureDetector(
                 onTap: isDisabled ? null : () => onJugadorSeleccionado(equipoClave, dorsal),
@@ -1939,7 +1997,7 @@ class _SeleccionarJugadorSecundarioPanel extends StatelessWidget {
                           style: TextStyle(
                             fontWeight: FontWeight.bold,
                             fontSize: 16,
-                            color: isDisabled ? Colors.black45 : Colors.black87,
+                            color: displayTextColor,
                           ),
                         ),
                       ),
@@ -1984,6 +2042,8 @@ class _JugadoresActivosSection extends StatelessWidget {
     required this.seleccionadoDorsal,
     required this.esperandoSecundario,
     required this.equipoClave,
+    required this.coloresPorPuesto,
+    required this.colorPorDefecto,
     required this.onTap,
     required this.getSancionEstado,
   });
@@ -1994,11 +2054,27 @@ class _JugadoresActivosSection extends StatelessWidget {
   final int? seleccionadoDorsal;
   final bool esperandoSecundario;
   final String equipoClave;
+  final Map<String, Color> coloresPorPuesto;
+  final Color colorPorDefecto;
   final Future<void> Function(String equipo, int dorsal) onTap;
   final SancionEstado? Function(String equipoClave, int dorsal) getSancionEstado;
 
   @override
   Widget build(BuildContext context) {
+    Color colorParaJugador(Map<String, dynamic> jugador) {
+      final puesto = ((jugador['posicionAtaque'] as String?) ??
+              (jugador['posicion'] as String?) ??
+              '')
+          .trim();
+      if (puesto.isEmpty) return colorPorDefecto;
+      return coloresPorPuesto[puesto] ?? colorPorDefecto;
+    }
+
+    Color textoPara(Color fondo) =>
+        ThemeData.estimateBrightnessForColor(fondo) == Brightness.dark
+            ? Colors.white
+            : Colors.black87;
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -2018,7 +2094,6 @@ class _JugadoresActivosSection extends StatelessWidget {
             final isEquipoPrincipal = seleccionadoEquipo == equipoClave;
             final esEquipoContrario = seleccionadoEquipo != null && seleccionadoEquipo != equipoClave;
             final esDorsalPrincipal = isEquipoPrincipal && seleccionadoDorsal == dorsal;
-            final esPortero = jugadores.indexOf(jugador) == 0;
             final sancion = getSancionEstado(equipoClave, dorsal);
             final bool tiene2Activa = sancion?.tieneDosMinActiva ?? false;
             final bool expulsado = sancion?.expulsado ?? false;
@@ -2029,17 +2104,13 @@ class _JugadoresActivosSection extends StatelessWidget {
 
             final bool isDisabled = isDisabledBase || tiene2Activa || (expulsado && esperandoSecundario);
 
-            final baseColor = esPortero
-                ? (isSelected
-                    ? Colors.lightBlue.shade400
-                    : Colors.lightBlue.shade200)
-                : (isSelected
-                    ? Colors.amber.shade300
-                    : Colors.amber.shade100);
-
-            final color = isDisabled
-                ? (esPortero ? baseColor : Colors.grey.shade300)
-                : baseColor;
+            final baseColor = colorParaJugador(jugador);
+            final displayColor = isDisabled
+                ? baseColor.withOpacity(0.35)
+                : baseColor.withOpacity(isSelected ? 0.9 : 1.0);
+            final textColor = textoPara(baseColor);
+            final displayTextColor =
+                isDisabled ? textColor.withOpacity(0.6) : textColor;
 
             return GestureDetector(
               onTap: isDisabled
@@ -2064,7 +2135,7 @@ class _JugadoresActivosSection extends StatelessWidget {
                       width: 56,
                       height: 56,
                       decoration: BoxDecoration(
-                        color: color,
+                        color: displayColor,
                         shape: BoxShape.circle,
                         boxShadow: isSelected
                             ? [
@@ -2079,9 +2150,7 @@ class _JugadoresActivosSection extends StatelessWidget {
                         style: TextStyle(
                           fontWeight: FontWeight.bold,
                           fontSize: 16,
-                          color: isDisabled
-                              ? Colors.black45
-                              : (isSelected ? Colors.black : Colors.black87),
+                          color: displayTextColor,
                         ),
                       ),
                     ),
