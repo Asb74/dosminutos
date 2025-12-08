@@ -32,6 +32,8 @@ class MapeoAccionEstadistica {
   );
 }
 
+Future<Map<String, MapeoAccionEstadistica>>? _mapaAccionesFuture;
+
 Future<Map<String, MapeoAccionEstadistica>> cargarMapaAccionesEstadistica() {
   _mapaAccionesFuture ??=
       FirebaseFirestore.instance.collection('AccionEstadistica').get().then(
@@ -51,8 +53,6 @@ Future<Map<String, MapeoAccionEstadistica>> cargarMapaAccionesEstadistica() {
 
   return _mapaAccionesFuture!;
 }
-
-Future<Map<String, MapeoAccionEstadistica>>? _mapaAccionesFuture;
 
 ZonaTiro clasificarZona(String? zonaCampo) {
   switch (zonaCampo) {
@@ -262,23 +262,39 @@ Future<PartidoStats> calcularEstadisticasPartidoDesdeSnapshots({
     'Azul',
   };
 
+  // ============================
+  // 1) ESTADÍSTICAS DE JUEGO
+  // ============================
   for (final doc in datosSnapshot.docs) {
     final data = doc.data();
     final String? equipoId = data['equipoId'] as String?;
     final int? dorsal = (data['dorsal'] as num?)?.toInt();
     final String? categoria = data['categoria'] as String?;
-    final String? accion = data['accion'] as String?;
+    final String? accionRaw = data['accion'] as String?;
     final String? zonaCampo = data['zona'] as String?;
     final zona = clasificarZona(zonaCampo);
 
     if (equipoId == null || dorsal == null || categoria == null) continue;
 
-    if (accionesSancion.contains(categoria) || accionesSancion.contains(accion)) {
+    // Resolvemos la ACCIÓN REAL de la jugada
+    String nombreAccion = accionRaw?.trim() ?? '';
+    if (nombreAccion.isEmpty) {
+      final mapeo = mapaAcciones[categoria];
+      nombreAccion = mapeo?.estadisticaPrincipal ?? categoria;
+    }
+
+    // Si la acción es una sanción, la tratamos sólo en sancionesSnapshot
+    if (accionesSancion.contains(categoria) ||
+        accionesSancion.contains(nombreAccion)) {
       continue;
     }
 
     final jugador = obtenerStatsJugador(equipoId, dorsal);
 
+    // Guardamos el contador genérico por nombreAccion para la UI
+    incrementarContador(jugador, nombreAccion);
+
+    // Helper interno para tiros por zona
     void cuentaZona(bool esGol) {
       switch (zona) {
         case ZonaTiro.seis:
@@ -326,57 +342,69 @@ Future<PartidoStats> calcularEstadisticasPartidoDesdeSnapshots({
       }
     }
 
-    final nombreAccion = accion ??
-        mapaAcciones[categoria ?? '']?.estadisticaPrincipal ??
-        categoria;
-    incrementarContador(jugador, nombreAccion);
-
-    switch (categoria) {
+    // --- Clasificación según la ACCIÓN real ---
+    switch (nombreAccion) {
+      // Lanzamientos del jugador de campo
       case 'Gol':
         jugador.lanzamientosTotales++;
         jugador.golesTotales++;
-        incrementarContador(jugador, 'Gol');
         cuentaZona(true);
         break;
-      case 'Lanzamiento':
-      case 'Lanzamiento Fallado':
-      case 'Bloqueo':
+
+      case 'Error Lanzamiento':
+      case 'Lanzamiento Bloqueado':
         jugador.lanzamientosTotales++;
-        incrementarContador(jugador, 'Lanzamiento');
         cuentaZona(false);
         break;
+
+      // Porteros
       case 'Gol Encajado':
         jugador.lanzamientosRecibidos++;
         jugador.golesEncajados++;
-        incrementarContador(jugador, 'Gol Encajado');
         break;
+
       case 'Parada':
         jugador.lanzamientosRecibidos++;
         jugador.paradas++;
-        incrementarContador(jugador, 'Parada');
         break;
+
       case 'Lanzamiento Recibido':
         jugador.lanzamientosRecibidos++;
         break;
-      case 'Perdida':
+
+      // Gestión de posesión
+      case 'Perdida Posesión':
         jugador.perdidas++;
-        incrementarContador(jugador, 'Perdida Posesión');
         break;
-      case 'Recuperación':
+
+      case 'Recuperación Posesión':
         jugador.recuperaciones++;
-        incrementarContador(jugador, 'Recuperación Posesión');
         break;
-      case 'Falta':
+
+      // Faltas
+      case 'Golpe cometido':
         jugador.golpesCometidos++;
-        incrementarContador(jugador, 'Golpe cometido');
         break;
-      case 'Falta Provocada':
+
+      case 'Golpe provocado':
         jugador.golpesProvocados++;
-        incrementarContador(jugador, 'Golpe provocado');
+        break;
+
+      // Asistencia: sólo contador genérico (ya sumado)
+      case 'Asistencia':
+        break;
+
+      default:
+        // Otras acciones: "Linea", "Pasivo", etc.
+        // Si desde el maestro "Linea" mapea a "Recuperación Posesión"
+        // ya queda recogido por el case anterior.
         break;
     }
   }
 
+  // ============================
+  // 2) SANCIONES
+  // ============================
   for (final doc in sancionesSnapshot.docs) {
     final data = doc.data();
     final String? equipoId = data['equipoId'] as String?;
@@ -390,28 +418,36 @@ Future<PartidoStats> calcularEstadisticasPartidoDesdeSnapshots({
 
     switch (accion) {
       case '2 minutos':
+      case '2 minutos Provocado':
         jugador.exclusiones2m++;
         incrementarContador(jugador, '2 minutos');
         break;
       case 'Tarjeta Amarilla':
       case 'Amarilla':
+      case 'Tarjeta Amarilla Provocado':
         jugador.amarillas++;
         incrementarContador(jugador, 'Tarjeta Amarilla');
         break;
       case 'Tarjeta Roja':
       case 'Roja':
+      case 'Tarjeta Roja Provocado':
         jugador.rojas++;
         incrementarContador(jugador, 'Tarjeta Roja');
         break;
       case 'Tarjeta Azul':
       case 'Azul':
+      case 'Tarjeta Azul Provocado':
         jugador.azules++;
         incrementarContador(jugador, 'Tarjeta Azul');
         break;
     }
   }
 
-  final tiemposJugados = (partidoData['tiemposJugados'] as Map<String, dynamic>?);
+  // ============================
+  // 3) TIEMPOS JUGADOS
+  // ============================
+  final tiemposJugados =
+      (partidoData['tiemposJugados'] as Map<String, dynamic>?);
   if (tiemposJugados != null) {
     tiemposJugados.forEach((key, value) {
       final statsJugador = mapa[key];
