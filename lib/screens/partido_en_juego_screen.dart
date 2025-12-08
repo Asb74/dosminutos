@@ -314,26 +314,39 @@ class _PartidoEnJuegoScreenState extends State<PartidoEnJuegoScreen> {
     });
   }
 
-  String? _puestoDeJugador(Map<String, dynamic> jugador) {
+  String? _puestoPrincipal(Map<String, dynamic> jugador) {
     final puestoAtaque = (jugador['posicionAtaque'] as String?)?.trim();
     if (puestoAtaque != null && puestoAtaque.isNotEmpty) {
       return puestoAtaque;
     }
+
     final posicion = (jugador['posicion'] as String?)?.trim();
     if (posicion != null && posicion.isNotEmpty) {
       return posicion;
     }
+
     return null;
   }
 
-  Color _colorDeJugador(Map<String, dynamic> jugador) {
-    final puesto = _puestoDeJugador(jugador);
-    if (puesto == null) return _colorPorDefectoPuesto;
-    final puestoNormalizado = normalizarPuesto(puesto);
-    final color = _coloresPorPuesto[puestoNormalizado] ?? _colorPorDefectoPuesto;
+  Color _colorDeJugador(
+    Map<String, dynamic> jugador, {
+    Map<String, Color>? colores,
+    Color? colorPorDefecto,
+  }) {
+    final puestoPreferido = _puestoPrincipal(jugador);
+    final puestoNormalizado = normalizarPuesto(puestoPreferido);
+    final mapa = colores ?? _coloresPorPuesto;
+
+    final Color? colorMapa =
+        puestoNormalizado.isEmpty ? null : mapa[puestoNormalizado];
+    final Color colorDefault = colorPorDefecto ?? _colorPorDefectoPuesto;
+    final colorSeleccionado = colorMapa ?? colorDefault.withOpacity(0.85);
+
     debugPrint(
-        '[ColoresPuesto] _colorDeJugador dorsal=${jugador['"'"'dorsal'"'"']} puesto="$puesto" (normalizado="$puestoNormalizado") => ${colorToHex(color)}');
-    return color;
+        '[ColoresPuesto] dorsal=${jugador['"'"'dorsal'"'"']} puestoAtaque="${jugador['"'"'posicionAtaque'"'"']}" posicion="${jugador['"'"'posicion'"'"']}" '
+        'usado="$puestoPreferido" (normalizado="$puestoNormalizado") => ${colorToHex(colorSeleccionado)}');
+
+    return colorSeleccionado;
   }
 
   Color _textoParaColor(Color fondo) {
@@ -1529,8 +1542,11 @@ class _PartidoEnJuegoScreenState extends State<PartidoEnJuegoScreen> {
                                           partidoActual.equipoLocalNombre,
                                       nombreEquipoVisitante:
                                           partidoActual.equipoVisitanteNombre,
-                                      coloresPorPuesto: colores,
-                                      colorPorDefecto: _colorPorDefectoPuesto,
+                                      colorParaJugador: (jugador) =>
+                                          _colorDeJugador(jugador,
+                                              colores: colores,
+                                              colorPorDefecto:
+                                                  _colorPorDefectoPuesto),
                                       onJugadorSeleccionado: (equipo, dorsal) async {
                                         await _onDorsalSecundarioSeleccionado(
                                             equipo, dorsal);
@@ -1574,8 +1590,10 @@ class _PartidoEnJuegoScreenState extends State<PartidoEnJuegoScreen> {
                           seleccionadoDorsal: _dorsalPrincipal,
                           esperandoSecundario: _esperandoJugadorSecundario,
                           equipoClave: 'local',
-                          coloresPorPuesto: colores,
-                          colorPorDefecto: _colorPorDefectoPuesto,
+                          colorParaJugador: (jugador) => _colorDeJugador(
+                              jugador,
+                              colores: colores,
+                              colorPorDefecto: _colorPorDefectoPuesto),
                           onTap: _seleccionarJugadorSecundario,
                           getSancionEstado: _getSancionDesdeClave,
                         ),
@@ -1587,8 +1605,10 @@ class _PartidoEnJuegoScreenState extends State<PartidoEnJuegoScreen> {
                           seleccionadoDorsal: _dorsalPrincipal,
                           esperandoSecundario: _esperandoJugadorSecundario,
                           equipoClave: 'visitante',
-                          coloresPorPuesto: colores,
-                          colorPorDefecto: _colorPorDefectoPuesto,
+                          colorParaJugador: (jugador) => _colorDeJugador(
+                              jugador,
+                              colores: colores,
+                              colorPorDefecto: _colorPorDefectoPuesto),
                           onTap: _seleccionarJugadorSecundario,
                           getSancionEstado: _getSancionDesdeClave,
                         ),
@@ -1937,8 +1957,7 @@ class _SeleccionarJugadorSecundarioPanel extends StatelessWidget {
     this.accionSeleccionada,
     required this.nombreEquipoLocal,
     required this.nombreEquipoVisitante,
-    required this.coloresPorPuesto,
-    required this.colorPorDefecto,
+    required this.colorParaJugador,
     required this.onJugadorSeleccionado,
     required this.getSancionEstado,
     Key? key,
@@ -1951,27 +1970,12 @@ class _SeleccionarJugadorSecundarioPanel extends StatelessWidget {
   final String? accionSeleccionada;
   final String nombreEquipoLocal;
   final String nombreEquipoVisitante;
-  final Map<String, Color> coloresPorPuesto;
-  final Color colorPorDefecto;
+  final Color Function(Map<String, dynamic> jugador) colorParaJugador;
   final Future<void> Function(String equipo, int dorsal) onJugadorSeleccionado;
   final SancionEstado? Function(String equipoClave, int dorsal) getSancionEstado;
 
   @override
   Widget build(BuildContext context) {
-    Color colorParaJugador(Map<String, dynamic> jugador) {
-      final puesto = ((jugador['posicionAtaque'] as String?) ??
-              (jugador['posicion'] as String?) ??
-              '')
-          .trim();
-      final puestoNormalizado = normalizarPuesto(puesto);
-      final color = puestoNormalizado.isEmpty
-          ? colorPorDefecto
-          : coloresPorPuesto[puestoNormalizado] ?? colorPorDefecto;
-      debugPrint(
-          '[ColoresPuesto] Secundario -> dorsal=${jugador['"'"'dorsal'"'"']} puesto="$puesto" (normalizado="$puestoNormalizado") color=${colorToHex(color)}');
-      return color;
-    }
-
     Color textoPara(Color fondo) =>
         ThemeData.estimateBrightnessForColor(fondo) == Brightness.dark
             ? Colors.white
@@ -2080,8 +2084,7 @@ class _JugadoresActivosSection extends StatelessWidget {
     required this.seleccionadoDorsal,
     required this.esperandoSecundario,
     required this.equipoClave,
-    required this.coloresPorPuesto,
-    required this.colorPorDefecto,
+    required this.colorParaJugador,
     required this.onTap,
     required this.getSancionEstado,
   });
@@ -2092,27 +2095,12 @@ class _JugadoresActivosSection extends StatelessWidget {
   final int? seleccionadoDorsal;
   final bool esperandoSecundario;
   final String equipoClave;
-  final Map<String, Color> coloresPorPuesto;
-  final Color colorPorDefecto;
+  final Color Function(Map<String, dynamic> jugador) colorParaJugador;
   final Future<void> Function(String equipo, int dorsal) onTap;
   final SancionEstado? Function(String equipoClave, int dorsal) getSancionEstado;
 
   @override
   Widget build(BuildContext context) {
-    Color colorParaJugador(Map<String, dynamic> jugador) {
-      final puesto = ((jugador['posicionAtaque'] as String?) ??
-              (jugador['posicion'] as String?) ??
-              '')
-          .trim();
-      final puestoNormalizado = normalizarPuesto(puesto);
-      final color = puestoNormalizado.isEmpty
-          ? colorPorDefecto
-          : coloresPorPuesto[puestoNormalizado] ?? colorPorDefecto;
-      debugPrint(
-          '[ColoresPuesto] Activos -> dorsal=${jugador['"'"'dorsal'"'"']} puesto="$puesto" (normalizado="$puestoNormalizado") color=${colorToHex(color)}');
-      return color;
-    }
-
     Color textoPara(Color fondo) =>
         ThemeData.estimateBrightnessForColor(fondo) == Brightness.dark
             ? Colors.white
