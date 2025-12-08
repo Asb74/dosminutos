@@ -11,6 +11,8 @@ const _accionesSancion = {
   'Tarjeta Roja Provocado',
   'Tarjeta Azul',
   'Tarjeta Azul Provocado',
+  'Golpe',
+  'Golpe Provocado',
   'Amarilla',
   'Roja',
   'Azul',

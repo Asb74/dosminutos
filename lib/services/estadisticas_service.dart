@@ -11,8 +11,7 @@ const List<String> ordenStatsJugador = [
   'Linea',
   'Perdida Posesión',
   'Recuperación Posesión',
-  'Golpe cometido',
-  'Golpe provocado',
+  'Golpe',
   'Asistencia',
   '2 minutos',
   'Tarjeta Amarilla',
@@ -106,8 +105,7 @@ class StatsJugador {
   int recuperaciones = 0;
 
   // Faltas y disciplina
-  int golpesCometidos = 0;
-  int golpesProvocados = 0;
+  int golpes = 0;
   int exclusiones2m = 0;
   int amarillas = 0;
   int rojas = 0;
@@ -257,6 +255,7 @@ Future<PartidoStats> calcularEstadisticasPartidoDesdeSnapshots({
     'Tarjeta Amarilla',
     'Tarjeta Roja',
     'Tarjeta Azul',
+    'Golpe',
     'Amarilla',
     'Roja',
     'Azul',
@@ -383,15 +382,6 @@ Future<PartidoStats> calcularEstadisticasPartidoDesdeSnapshots({
         jugador.recuperaciones++;
         break;
 
-      // Faltas
-      case 'Golpe cometido':
-        jugador.golpesCometidos++;
-        break;
-
-      case 'Golpe provocado':
-        jugador.golpesProvocados++;
-        break;
-
       // Asistencia: sólo contador genérico (ya sumado)
       case 'Asistencia':
         break;
@@ -430,6 +420,10 @@ Future<PartidoStats> calcularEstadisticasPartidoDesdeSnapshots({
         jugador.amarillas++;
         incrementarContador(jugador, 'Tarjeta Amarilla');
         break;
+      case 'Golpe':
+        jugador.golpes++;
+        incrementarContador(jugador, 'Golpe');
+        break;
       case 'Tarjeta Roja':
       case 'Roja':
         jugador.rojas++;
@@ -447,14 +441,25 @@ Future<PartidoStats> calcularEstadisticasPartidoDesdeSnapshots({
   // 3) TIEMPOS JUGADOS
   // ============================
   final tiemposJugados =
-      (partidoData['tiemposJugados'] as Map<String, dynamic>?);
-  if (tiemposJugados != null) {
-    tiemposJugados.forEach((key, value) {
-      final statsJugador = mapa[key];
-      if (statsJugador != null) {
-        statsJugador.segsJugados = (value as num).toInt();
+      (partidoData['tiemposJugados'] as Map<String, dynamic>?) ?? {};
+
+  for (final entry in tiemposJugados.entries) {
+    final key = entry.key;
+    final valorSegundos = (entry.value as num?)?.toInt() ?? 0;
+    final partesKey = key.split('#');
+    if (partesKey.length == 2) {
+      final equipoId = partesKey[0];
+      final dorsal = int.tryParse(partesKey[1]);
+      if (equipoId.isNotEmpty && dorsal != null) {
+        final statsJugador = stats.obtenerStatsJugador(equipoId, dorsal);
+        statsJugador.segsJugados = valorSegundos;
       }
-    });
+    }
+  }
+
+  for (final entry in mapa.entries) {
+    entry.value.segsJugados =
+        (tiemposJugados[entry.key] as num?)?.toInt() ?? 0;
   }
 
   return stats;

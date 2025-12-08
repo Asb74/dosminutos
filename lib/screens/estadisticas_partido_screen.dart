@@ -558,13 +558,7 @@ class _EquipoStatsTabState extends State<_EquipoStatsTab>
                       ),
                       _ResumenChip(
                         label: 'Golpes',
-                        value:
-                            _contadorResumen(resumen, 'Golpe cometido').toString(),
-                      ),
-                      _ResumenChip(
-                        label: 'Prov.G',
-                        value:
-                            _contadorResumen(resumen, 'Golpe provocado').toString(),
+                        value: _contadorResumen(resumen, 'Golpe').toString(),
                       ),
                       _ResumenChip(
                         label: 'Paradas',
@@ -660,10 +654,7 @@ class _EquipoStatsTabState extends State<_EquipoStatsTab>
                                 _contadorJugador(p, 'Perdida Posesión');
                             final recuperaciones =
                                 _contadorJugador(p, 'Recuperación Posesión');
-                            final golpesCometidos =
-                                _contadorJugador(p, 'Golpe cometido');
-                            final golpesProvocados =
-                                _contadorJugador(p, 'Golpe provocado');
+                            final golpes = _contadorJugador(p, 'Golpe');
                             final asistencias =
                                 _contadorJugador(p, 'Asistencia');
                             final lineas = _contadorJugador(p, 'Linea');
@@ -716,11 +707,7 @@ class _EquipoStatsTabState extends State<_EquipoStatsTab>
                               ),
                               _StatChip(
                                 label: 'Golpe',
-                                value: '$golpesCometidos',
-                              ),
-                              _StatChip(
-                                label: 'Prov.G',
-                                value: '$golpesProvocados',
+                                value: '$golpes',
                               ),
                               _StatChip(
                                 label: 'Asist.',
