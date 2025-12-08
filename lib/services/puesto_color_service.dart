@@ -27,6 +27,10 @@ String colorToHex(Color color) {
   return '#${value.substring(2).toUpperCase()}';
 }
 
+String normalizarPuesto(String? puesto) {
+  return puesto?.trim().toLowerCase() ?? '';
+}
+
 /// ======================
 /// Cache en memoria
 /// ======================
@@ -69,12 +73,12 @@ Future<Map<String, Color>> cargarMapaColoresPuesto({
       final puestoRaw = data['puesto'] as String?;
       final colorHex = data['colorHex'] as String?;
 
-      final puestoNormalizado = puestoRaw?.trim().toLowerCase();
+      final puestoNormalizado = normalizarPuesto(puestoRaw);
 
       debugPrint(
           '[ColoresPuesto] Doc ${doc.id} -> puestoRaw="$puestoRaw", normalizado="$puestoNormalizado", colorHex="$colorHex"');
 
-      if (puestoNormalizado == null || puestoNormalizado.isEmpty) {
+      if (puestoNormalizado.isEmpty) {
         debugPrint(
             '[ColoresPuesto]   -> Saltado (puesto nulo o vacío)');
         continue;
@@ -121,8 +125,8 @@ void limpiarCacheColoresPuesto() {
 
 /// Devuelve el color para un puesto (ej: "Portero")
 Color obtenerColorParaPuestoSync(String? puesto) {
-  final puestoNormalizado = puesto?.trim().toLowerCase();
-  if (puestoNormalizado == null || puestoNormalizado.isEmpty) {
+  final puestoNormalizado = normalizarPuesto(puesto);
+  if (puestoNormalizado.isEmpty) {
     return Colors.grey;
   }
 
@@ -130,8 +134,11 @@ Color obtenerColorParaPuestoSync(String? puesto) {
   if (color == null) {
     debugPrint(
         '[ColoresPuesto] Color NO encontrado para "$puestoNormalizado" -> gris');
+    return Colors.grey;
   }
-  return color ?? Colors.grey;
+  debugPrint(
+      '[ColoresPuesto] Color encontrado para "$puestoNormalizado" -> ${colorToHex(color)}');
+  return color;
 }
 
 /// Devuelve el color para un jugador usando jugadorData['posicionAtaque']
@@ -140,4 +147,14 @@ Color obtenerColorParaJugadorSync(Map<String, dynamic> jugadorData) {
   debugPrint(
       '[ColoresPuesto] obtenerColorParaJugadorSync -> posicionAtaque="$puesto"');
   return obtenerColorParaPuestoSync(puesto);
+}
+
+Future<Color> obtenerColorParaJugador(Map<String, dynamic> jugadorData) async {
+  final mapa = await cargarMapaColoresPuesto();
+  final puesto = jugadorData['posicionAtaque'] as String?;
+  final puestoNormalizado = normalizarPuesto(puesto);
+  final color = mapa[puestoNormalizado] ?? Colors.grey;
+  debugPrint(
+      '[ColoresPuesto] obtenerColorParaJugador -> posicionAtaque="$puesto" (normalizado="$puestoNormalizado") => ${colorToHex(color)}');
+  return color;
 }

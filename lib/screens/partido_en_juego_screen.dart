@@ -285,6 +285,7 @@ class _PartidoEnJuegoScreenState extends State<PartidoEnJuegoScreen> {
   List<Map<String, dynamic>> _jugadoresVisitante = [];
   bool _sancionesCargadas = false;
   Map<String, Color> _coloresPorPuesto = {};
+  late final Future<Map<String, Color>> _coloresPuestoFuture;
   final Color _colorPorDefectoPuesto = Colors.grey.shade300;
 
   String _keySancion(String equipoId, int dorsal) => '$equipoId#$dorsal';
@@ -300,13 +301,17 @@ class _PartidoEnJuegoScreenState extends State<PartidoEnJuegoScreen> {
     return _estadoSanciones[key];
   }
 
-  Future<void> _cargarColoresPuesto() async {
-    final mapa = await cargarMapaColoresPuesto();
-    if (mounted) {
-      setState(() {
-        _coloresPorPuesto = mapa;
-      });
-    }
+  void _inicializarColoresPuesto() {
+    _coloresPuestoFuture = cargarMapaColoresPuesto();
+    _coloresPuestoFuture.then((mapa) {
+      if (mounted) {
+        setState(() {
+          _coloresPorPuesto = mapa;
+        });
+        debugPrint(
+            '[ColoresPuesto] Colores cargados en partido_en_juego_screen (${mapa.length} entradas)');
+      }
+    });
   }
 
   String? _puestoDeJugador(Map<String, dynamic> jugador) {
@@ -324,7 +329,11 @@ class _PartidoEnJuegoScreenState extends State<PartidoEnJuegoScreen> {
   Color _colorDeJugador(Map<String, dynamic> jugador) {
     final puesto = _puestoDeJugador(jugador);
     if (puesto == null) return _colorPorDefectoPuesto;
-    return _coloresPorPuesto[puesto] ?? _colorPorDefectoPuesto;
+    final puestoNormalizado = normalizarPuesto(puesto);
+    final color = _coloresPorPuesto[puestoNormalizado] ?? _colorPorDefectoPuesto;
+    debugPrint(
+        '[ColoresPuesto] _colorDeJugador dorsal=${jugador['"'"'dorsal'"'"']} puesto="$puesto" (normalizado="$puestoNormalizado") => ${colorToHex(color)}');
+    return color;
   }
 
   Color _textoParaColor(Color fondo) {
@@ -337,7 +346,7 @@ class _PartidoEnJuegoScreenState extends State<PartidoEnJuegoScreen> {
   void initState() {
     super.initState();
     WakelockPlus.enable();
-    _cargarColoresPuesto();
+    _inicializarColoresPuesto();
   }
 
   @override
@@ -1467,101 +1476,125 @@ class _PartidoEnJuegoScreenState extends State<PartidoEnJuegoScreen> {
                   style: Theme.of(context).textTheme.titleMedium,
                 ),
                 const SizedBox(height: 8),
-                // Pequeña máquina de estados para alternar pista, acciones y portería
-                AnimatedSwitcher(
-                  duration: const Duration(milliseconds: 250),
-                  child: mostrarPorteria
-                      ? Column(
-                          key: const ValueKey('porteria'),
-                          children: [
-                            PorteriaGridSelector(
-                              cuadranteSeleccionado: _zonaPorteria,
-                              onCuadranteSelected: _onSeleccionPorteria,
-                            ),
-                            const SizedBox(height: 8),
-                            const Text(
-                              'Toca un cuadrante de la portería',
-                              textAlign: TextAlign.center,
-                            ),
-                            Align(
-                              alignment: Alignment.centerRight,
-                              child: IconButton(
-                                onPressed: _resetFlujoAccion,
-                                icon: const Icon(Icons.close),
-                              ),
-                            )
-                          ],
-                        )
-                      : _esperandoJugadorSecundario
-                          ? _SeleccionarJugadorSecundarioPanel(
-                              key: const ValueKey('secundario'),
-                              jugadoresLocal: _jugadoresLocal,
-                              jugadoresVisitante: _jugadoresVisitante,
-                              equipoPrincipal: _equipoPrincipal,
-                              dorsalPrincipal: _dorsalPrincipal,
-                              accionSeleccionada: _accionSeleccionada,
-                              nombreEquipoLocal: partidoActual.equipoLocalNombre,
-                              nombreEquipoVisitante: partidoActual.equipoVisitanteNombre,
-                              coloresPorPuesto: _coloresPorPuesto,
-                              colorPorDefecto: _colorPorDefectoPuesto,
-                              onJugadorSeleccionado: (equipo, dorsal) async {
-                                await _onDorsalSecundarioSeleccionado(equipo, dorsal);
-                              },
-                              getSancionEstado: _getSancionDesdeClave,
-                            )
-                          : mostrarAcciones
-                              ? _AccionesPanel(
-                                  key: const ValueKey('acciones'),
-                                  zonaSeleccionada: _zonaCampo,
-                                  onAccionSeleccionada: (_, accion) {
-                                    _onAccionFlujoSeleccionada(accion);
-                                  },
-                                  onCancelar: _resetFlujoAccion,
-                                )
-                              : mostrarZonas
-                                  ? Column(
-                                      key: const ValueKey('zonas'),
-                                      children: [
-                                        ZonaLanzamientoSelector(
-                                          zonaSeleccionada: _zonaCampo,
-                                          onZonaSelected: _seleccionarZonaCampo,
-                                        ),
-                                        const SizedBox(height: 8),
-                                        Text(
-                                          _zonaCampo == null
-                                              ? 'Toca una zona para seleccionarla'
-                                              : 'Zona seleccionada: $_zonaCampo',
-                                          textAlign: TextAlign.center,
-                                        ),
-                                      ],
+                FutureBuilder<Map<String, Color>>(
+                  future: _coloresPuestoFuture,
+                  builder: (context, snapshot) {
+                    final colores = snapshot.data ?? _coloresPorPuesto;
+
+                    if (snapshot.connectionState == ConnectionState.waiting &&
+                        colores.isEmpty) {
+                      return const Padding(
+                        padding: EdgeInsets.symmetric(vertical: 12),
+                        child: Center(child: CircularProgressIndicator()),
+                      );
+                    }
+
+                    return Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        // Pequeña máquina de estados para alternar pista, acciones y portería
+                        AnimatedSwitcher(
+                          duration: const Duration(milliseconds: 250),
+                          child: mostrarPorteria
+                              ? Column(
+                                  key: const ValueKey('porteria'),
+                                  children: [
+                                    PorteriaGridSelector(
+                                      cuadranteSeleccionado: _zonaPorteria,
+                                      onCuadranteSelected: _onSeleccionPorteria,
+                                    ),
+                                    const SizedBox(height: 8),
+                                    const Text(
+                                      'Toca un cuadrante de la portería',
+                                      textAlign: TextAlign.center,
+                                    ),
+                                    Align(
+                                      alignment: Alignment.centerRight,
+                                      child: IconButton(
+                                        onPressed: _resetFlujoAccion,
+                                        icon: const Icon(Icons.close),
+                                      ),
                                     )
-                                  : const SizedBox.shrink(),
-                ),
-                const SizedBox(height: 16),
-                _JugadoresActivosSection(
-                  titulo: '${partidoActual.equipoLocalNombre}',
-                  jugadores: _jugadoresLocal,
-                  seleccionadoEquipo: _equipoPrincipal,
-                  seleccionadoDorsal: _dorsalPrincipal,
-                  esperandoSecundario: _esperandoJugadorSecundario,
-                  equipoClave: 'local',
-                  coloresPorPuesto: _coloresPorPuesto,
-                  colorPorDefecto: _colorPorDefectoPuesto,
-                  onTap: _seleccionarJugadorSecundario,
-                  getSancionEstado: _getSancionDesdeClave,
-                ),
-                const SizedBox(height: 8),
-                _JugadoresActivosSection(
-                  titulo: '${partidoActual.equipoVisitanteNombre}',
-                  jugadores: _jugadoresVisitante,
-                  seleccionadoEquipo: _equipoPrincipal,
-                  seleccionadoDorsal: _dorsalPrincipal,
-                  esperandoSecundario: _esperandoJugadorSecundario,
-                  equipoClave: 'visitante',
-                  coloresPorPuesto: _coloresPorPuesto,
-                  colorPorDefecto: _colorPorDefectoPuesto,
-                  onTap: _seleccionarJugadorSecundario,
-                  getSancionEstado: _getSancionDesdeClave,
+                                  ],
+                                )
+                              : _esperandoJugadorSecundario
+                                  ? _SeleccionarJugadorSecundarioPanel(
+                                      key: const ValueKey('secundario'),
+                                      jugadoresLocal: _jugadoresLocal,
+                                      jugadoresVisitante: _jugadoresVisitante,
+                                      equipoPrincipal: _equipoPrincipal,
+                                      dorsalPrincipal: _dorsalPrincipal,
+                                      accionSeleccionada: _accionSeleccionada,
+                                      nombreEquipoLocal:
+                                          partidoActual.equipoLocalNombre,
+                                      nombreEquipoVisitante:
+                                          partidoActual.equipoVisitanteNombre,
+                                      coloresPorPuesto: colores,
+                                      colorPorDefecto: _colorPorDefectoPuesto,
+                                      onJugadorSeleccionado: (equipo, dorsal) async {
+                                        await _onDorsalSecundarioSeleccionado(
+                                            equipo, dorsal);
+                                      },
+                                      getSancionEstado: _getSancionDesdeClave,
+                                    )
+                                  : mostrarAcciones
+                                      ? _AccionesPanel(
+                                          key: const ValueKey('acciones'),
+                                          zonaSeleccionada: _zonaCampo,
+                                          onAccionSeleccionada: (_, accion) {
+                                            _onAccionFlujoSeleccionada(accion);
+                                          },
+                                          onCancelar: _resetFlujoAccion,
+                                        )
+                                      : mostrarZonas
+                                          ? Column(
+                                              key: const ValueKey('zonas'),
+                                              children: [
+                                                ZonaLanzamientoSelector(
+                                                  zonaSeleccionada: _zonaCampo,
+                                                  onZonaSelected:
+                                                      _seleccionarZonaCampo,
+                                                ),
+                                                const SizedBox(height: 8),
+                                                Text(
+                                                  _zonaCampo == null
+                                                      ? 'Toca una zona para seleccionarla'
+                                                      : 'Zona seleccionada: $_zonaCampo',
+                                                  textAlign: TextAlign.center,
+                                                ),
+                                              ],
+                                            )
+                                          : const SizedBox.shrink(),
+                        ),
+                        const SizedBox(height: 16),
+                        _JugadoresActivosSection(
+                          titulo: '${partidoActual.equipoLocalNombre}',
+                          jugadores: _jugadoresLocal,
+                          seleccionadoEquipo: _equipoPrincipal,
+                          seleccionadoDorsal: _dorsalPrincipal,
+                          esperandoSecundario: _esperandoJugadorSecundario,
+                          equipoClave: 'local',
+                          coloresPorPuesto: colores,
+                          colorPorDefecto: _colorPorDefectoPuesto,
+                          onTap: _seleccionarJugadorSecundario,
+                          getSancionEstado: _getSancionDesdeClave,
+                        ),
+                        const SizedBox(height: 8),
+                        _JugadoresActivosSection(
+                          titulo: '${partidoActual.equipoVisitanteNombre}',
+                          jugadores: _jugadoresVisitante,
+                          seleccionadoEquipo: _equipoPrincipal,
+                          seleccionadoDorsal: _dorsalPrincipal,
+                          esperandoSecundario: _esperandoJugadorSecundario,
+                          equipoClave: 'visitante',
+                          coloresPorPuesto: colores,
+                          colorPorDefecto: _colorPorDefectoPuesto,
+                          onTap: _seleccionarJugadorSecundario,
+                          getSancionEstado: _getSancionDesdeClave,
+                        ),
+                      ],
+                    );
+                  },
                 ),
                 const SizedBox(height: 16),
                 FilledButton.icon(
@@ -1930,8 +1963,13 @@ class _SeleccionarJugadorSecundarioPanel extends StatelessWidget {
               (jugador['posicion'] as String?) ??
               '')
           .trim();
-      if (puesto.isEmpty) return colorPorDefecto;
-      return coloresPorPuesto[puesto] ?? colorPorDefecto;
+      final puestoNormalizado = normalizarPuesto(puesto);
+      final color = puestoNormalizado.isEmpty
+          ? colorPorDefecto
+          : coloresPorPuesto[puestoNormalizado] ?? colorPorDefecto;
+      debugPrint(
+          '[ColoresPuesto] Secundario -> dorsal=${jugador['"'"'dorsal'"'"']} puesto="$puesto" (normalizado="$puestoNormalizado") color=${colorToHex(color)}');
+      return color;
     }
 
     Color textoPara(Color fondo) =>
@@ -2066,8 +2104,13 @@ class _JugadoresActivosSection extends StatelessWidget {
               (jugador['posicion'] as String?) ??
               '')
           .trim();
-      if (puesto.isEmpty) return colorPorDefecto;
-      return coloresPorPuesto[puesto] ?? colorPorDefecto;
+      final puestoNormalizado = normalizarPuesto(puesto);
+      final color = puestoNormalizado.isEmpty
+          ? colorPorDefecto
+          : coloresPorPuesto[puestoNormalizado] ?? colorPorDefecto;
+      debugPrint(
+          '[ColoresPuesto] Activos -> dorsal=${jugador['"'"'dorsal'"'"']} puesto="$puesto" (normalizado="$puestoNormalizado") color=${colorToHex(color)}');
+      return color;
     }
 
     Color textoPara(Color fondo) =>
