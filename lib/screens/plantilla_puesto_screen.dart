@@ -1,7 +1,8 @@
 
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter_colorpicker/flutter_colorpicker.dart';
+import 'package:flutter_colorpicker/flutter_colorpicker.dart'
+    hide colorFromHex, colorToHex;
 
 import '../services/puesto_color_service.dart';
 
