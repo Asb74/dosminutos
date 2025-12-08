@@ -2,6 +2,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 
 import '../services/estadisticas_service.dart';
+import '../services/puesto_color_service.dart';
 
 List<Map<String, dynamic>> _convocadosOrdenados(
   Map<String, dynamic> data, {
@@ -42,6 +43,14 @@ class _EstadisticasPartidoScreenState extends State<EstadisticasPartidoScreen> {
   final ScrollController _scrollVisitHorizontal = ScrollController();
 
   Map<String, dynamic>? _lastPartidoData;
+  late final Future<Map<String, Color>> _coloresFuture;
+  final Color _colorPorDefecto = Colors.grey.shade300;
+
+  @override
+  void initState() {
+    super.initState();
+    _coloresFuture = cargarMapaColoresPuesto();
+  }
 
   @override
   void dispose() {
@@ -54,51 +63,70 @@ class _EstadisticasPartidoScreenState extends State<EstadisticasPartidoScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return DefaultTabController(
-      length: 2,
-      child: Scaffold(
-        appBar: AppBar(
-          title: const Text('Estadísticas'),
-        ),
-        body: Column(
-          children: [
-            Expanded(
-              child: StreamBuilder<DocumentSnapshot<Map<String, dynamic>>>(
-                stream: FirebaseFirestore.instance
-                    .collection('Partidos')
-                    .doc(widget.partidoId)
-                    .snapshots(),
-                builder: (context, partidoSnapshot) {
-                  if (partidoSnapshot.hasError) {
-                    return Center(
-                        child: Text('Error: ${partidoSnapshot.error}'));
-                  }
-
-                  if (partidoSnapshot.hasData &&
-                      partidoSnapshot.data!.data() != null) {
-                    _lastPartidoData = partidoSnapshot.data!.data();
-                  }
-
-                  if (_lastPartidoData == null) {
-                    return const Center(child: CircularProgressIndicator());
-                  }
-
-                  final data = _lastPartidoData!;
-
-                  return _EstadisticasBody(
-                    partidoId: widget.partidoId,
-                    partidoData: data,
-                    scrollLocal: _scrollLocalVertical,
-                    scrollVisit: _scrollVisitVertical,
-                    scrollHorizontalLocal: _scrollLocalHorizontal,
-                    scrollHorizontalVisit: _scrollVisitHorizontal,
-                  );
-                },
-              ),
+    return FutureBuilder<Map<String, Color>>(
+      future: _coloresFuture,
+      builder: (context, colorSnapshot) {
+        if (colorSnapshot.connectionState == ConnectionState.waiting &&
+            !colorSnapshot.hasData) {
+          return Scaffold(
+            appBar: AppBar(
+              title: const Text('Estadísticas'),
             ),
-          ],
-        ),
-      ),
+            body: const Center(child: CircularProgressIndicator()),
+          );
+        }
+
+        final coloresPorPuesto = colorSnapshot.data ?? {};
+
+        return DefaultTabController(
+          length: 2,
+          child: Scaffold(
+            appBar: AppBar(
+              title: const Text('Estadísticas'),
+            ),
+            body: Column(
+              children: [
+                Expanded(
+                  child: StreamBuilder<DocumentSnapshot<Map<String, dynamic>>>(
+                    stream: FirebaseFirestore.instance
+                        .collection('Partidos')
+                        .doc(widget.partidoId)
+                        .snapshots(),
+                    builder: (context, partidoSnapshot) {
+                      if (partidoSnapshot.hasError) {
+                        return Center(
+                            child: Text('Error: ${partidoSnapshot.error}'));
+                      }
+
+                      if (partidoSnapshot.hasData &&
+                          partidoSnapshot.data!.data() != null) {
+                        _lastPartidoData = partidoSnapshot.data!.data();
+                      }
+
+                      if (_lastPartidoData == null) {
+                        return const Center(child: CircularProgressIndicator());
+                      }
+
+                      final data = _lastPartidoData!;
+
+                      return _EstadisticasBody(
+                        partidoId: widget.partidoId,
+                        partidoData: data,
+                        scrollLocal: _scrollLocalVertical,
+                        scrollVisit: _scrollVisitVertical,
+                        scrollHorizontalLocal: _scrollLocalHorizontal,
+                        scrollHorizontalVisit: _scrollVisitHorizontal,
+                        coloresPorPuesto: coloresPorPuesto,
+                        colorPorDefecto: _colorPorDefecto,
+                      );
+                    },
+                  ),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
     );
   }
 }
@@ -110,6 +138,8 @@ class _EstadisticasBody extends StatelessWidget {
   final ScrollController scrollVisit;
   final ScrollController scrollHorizontalLocal;
   final ScrollController scrollHorizontalVisit;
+  final Map<String, Color> coloresPorPuesto;
+  final Color colorPorDefecto;
 
   const _EstadisticasBody({
     required this.partidoId,
@@ -118,6 +148,8 @@ class _EstadisticasBody extends StatelessWidget {
     required this.scrollVisit,
     required this.scrollHorizontalLocal,
     required this.scrollHorizontalVisit,
+    required this.coloresPorPuesto,
+    required this.colorPorDefecto,
   });
 
   static Map<int, Map<String, dynamic>> _mapearConvocadosPorDorsal(
@@ -198,6 +230,8 @@ class _EstadisticasBody extends StatelessWidget {
             scrollVisit: scrollVisit,
             scrollHorizontalLocal: scrollHorizontalLocal,
             scrollHorizontalVisit: scrollHorizontalVisit,
+            coloresPorPuesto: coloresPorPuesto,
+            colorPorDefecto: colorPorDefecto,
           ),
         ),
       ],
@@ -221,6 +255,8 @@ class _EstadisticasStreams extends StatefulWidget {
   final ScrollController scrollVisit;
   final ScrollController scrollHorizontalLocal;
   final ScrollController scrollHorizontalVisit;
+  final Map<String, Color> coloresPorPuesto;
+  final Color colorPorDefecto;
 
   const _EstadisticasStreams({
     required this.partidoId,
@@ -238,6 +274,8 @@ class _EstadisticasStreams extends StatefulWidget {
     required this.scrollVisit,
     required this.scrollHorizontalLocal,
     required this.scrollHorizontalVisit,
+    required this.coloresPorPuesto,
+    required this.colorPorDefecto,
   });
 
   @override
@@ -320,6 +358,8 @@ class _EstadisticasStreamsState extends State<_EstadisticasStreams> {
                       tiemposJugados: widget.tiemposJugados,
                       scrollController: widget.scrollLocal,
                       horizontalController: widget.scrollHorizontalLocal,
+                      coloresPorPuesto: widget.coloresPorPuesto,
+                      colorPorDefecto: widget.colorPorDefecto,
                       esLocal: true,
                     ),
                     _EquipoStatsTab(
@@ -331,6 +371,8 @@ class _EstadisticasStreamsState extends State<_EstadisticasStreams> {
                       tiemposJugados: widget.tiemposJugados,
                       scrollController: widget.scrollVisit,
                       horizontalController: widget.scrollHorizontalVisit,
+                      coloresPorPuesto: widget.coloresPorPuesto,
+                      colorPorDefecto: widget.colorPorDefecto,
                       esLocal: false,
                     ),
                   ],
@@ -354,6 +396,8 @@ class _EquipoStatsTab extends StatefulWidget {
   final ScrollController scrollController;
   final ScrollController horizontalController;
   final bool esLocal;
+  final Map<String, Color> coloresPorPuesto;
+  final Color colorPorDefecto;
 
   const _EquipoStatsTab({
     Key? key,
@@ -366,6 +410,8 @@ class _EquipoStatsTab extends StatefulWidget {
     required this.scrollController,
     required this.horizontalController,
     required this.esLocal,
+    required this.coloresPorPuesto,
+    required this.colorPorDefecto,
   }) : super(key: key);
 
   @override
@@ -403,6 +449,21 @@ class _EquipoStatsTabState extends State<_EquipoStatsTab>
     }
     super.dispose();
   }
+
+  Color _colorParaJugador(int dorsal) {
+    final datosJugador = widget.mapaConvocados[dorsal];
+    final puesto = ((datosJugador?['posicionAtaque'] as String?) ??
+            (datosJugador?['posicion'] as String?) ??
+            '')
+        .trim();
+    if (puesto.isEmpty) return widget.colorPorDefecto;
+    return widget.coloresPorPuesto[puesto] ?? widget.colorPorDefecto;
+  }
+
+  Color _textoPara(Color fondo) =>
+      ThemeData.estimateBrightnessForColor(fondo) == Brightness.dark
+          ? Colors.white
+          : Colors.black87;
 
   String formatTiempo(int seconds) {
     final m = seconds ~/ 60;
@@ -587,11 +648,8 @@ class _EquipoStatsTabState extends State<_EquipoStatsTab>
           widget.mapaConvocados,
           p.dorsal,
         );
-        final esPortero = p.esPortero ||
-            _EstadisticasBody._esPortero(
-              widget.mapaConvocados,
-              p.dorsal,
-            );
+        final baseColor = _colorParaJugador(p.dorsal);
+        final textColor = _textoPara(baseColor);
         final String keyTiempo = '${widget.equipoId}#${p.dorsal}';
         final int segundosJugados = widget.tiemposJugados[keyTiempo] ?? 0;
         final acierto = p.lanzamientosTotales == 0
@@ -609,17 +667,16 @@ class _EquipoStatsTabState extends State<_EquipoStatsTab>
                   width: 48,
                   height: 48,
                   decoration: BoxDecoration(
-                    color: esPortero
-                        ? Colors.lightBlue.shade200
-                        : Colors.amber.shade100,
+                    color: baseColor,
                     shape: BoxShape.circle,
                   ),
                   alignment: Alignment.center,
                   child: Text(
                     p.dorsal.toString(),
-                    style: const TextStyle(
+                    style: TextStyle(
                       fontWeight: FontWeight.bold,
                       fontSize: 18,
+                      color: textColor,
                     ),
                   ),
                 ),

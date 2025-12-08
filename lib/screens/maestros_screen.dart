@@ -4,6 +4,7 @@ import 'arbitros_screen.dart';
 import 'clubes_screen.dart';
 import 'equipos_screen.dart';
 import 'jugadores_clubes_screen.dart';
+import 'plantilla_puesto_screen.dart';
 import 'staff_equipos_screen.dart';
 import 'temporadas_screen.dart';
 
@@ -83,6 +84,18 @@ class MaestrosScreen extends StatelessWidget {
               icon: Icons.emoji_events_outlined,
               colorScheme: colorScheme,
               onTap: () => Navigator.pushNamed(context, '/campeonatos'),
+            ),
+            _MaestroCard(
+              title: 'Plantilla por puesto',
+              description: 'Colores para cada puesto.',
+              icon: Icons.palette,
+              colorScheme: colorScheme,
+              onTap: () => Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (_) => const PlantillaPuestoScreen(),
+                ),
+              ),
             ),
           ],
         ),

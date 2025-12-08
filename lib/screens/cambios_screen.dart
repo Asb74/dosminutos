@@ -1,5 +1,6 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
+import '../services/puesto_color_service.dart';
 import '../widgets/sanciones_widgets.dart';
 
 class CambiosScreen extends StatefulWidget {
@@ -23,6 +24,15 @@ class CambiosScreen extends StatefulWidget {
 }
 
 class _CambiosScreenState extends State<CambiosScreen> {
+  late final Future<Map<String, Color>> _coloresFuture;
+  final Color _colorPorDefecto = Colors.grey.shade300;
+
+  @override
+  void initState() {
+    super.initState();
+    _coloresFuture = cargarMapaColoresPuesto();
+  }
+
   List<int> _parseJugadoresEnJuego(dynamic raw) {
     final lista = raw is List ? raw : <dynamic>[];
 
@@ -40,28 +50,50 @@ class _CambiosScreenState extends State<CambiosScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final colorScheme = Theme.of(context).colorScheme;
-
     return Scaffold(
       appBar: AppBar(
         title: const Text('Partido en juego'),
       ),
       body: SafeArea(
-        child: StreamBuilder<DocumentSnapshot<Map<String, dynamic>>>(
-          stream: FirebaseFirestore.instance
-              .collection('Partidos')
-              .doc(widget.partidoId)
-              .snapshots(),
-          builder: (context, snapshot) {
-            if (snapshot.connectionState == ConnectionState.waiting) {
+        child: FutureBuilder<Map<String, Color>>(
+          future: _coloresFuture,
+          builder: (context, colorSnapshot) {
+            if (colorSnapshot.connectionState == ConnectionState.waiting &&
+                !colorSnapshot.hasData) {
               return const Center(child: CircularProgressIndicator());
             }
 
-            if (!snapshot.hasData || !snapshot.data!.exists) {
-              return const Center(
-                child: Text('No se encontró la información del partido.'),
-              );
+            final coloresPorPuesto = colorSnapshot.data ?? {};
+
+            Color colorParaJugador(Map<String, dynamic> jugador) {
+              final puesto = ((jugador['posicionAtaque'] as String?) ??
+                      (jugador['posicion'] as String?) ??
+                      '')
+                  .trim();
+              if (puesto.isEmpty) return _colorPorDefecto;
+              return coloresPorPuesto[puesto] ?? _colorPorDefecto;
             }
+
+            Color textoPara(Color fondo) =>
+                ThemeData.estimateBrightnessForColor(fondo) == Brightness.dark
+                    ? Colors.white
+                    : Colors.black87;
+
+            return StreamBuilder<DocumentSnapshot<Map<String, dynamic>>>(
+              stream: FirebaseFirestore.instance
+                  .collection('Partidos')
+                  .doc(widget.partidoId)
+                  .snapshots(),
+              builder: (context, snapshot) {
+                if (snapshot.connectionState == ConnectionState.waiting) {
+                  return const Center(child: CircularProgressIndicator());
+                }
+
+                if (!snapshot.hasData || !snapshot.data!.exists) {
+                  return const Center(
+                    child: Text('No se encontró la información del partido.'),
+                  );
+                }
 
             final data = snapshot.data!.data()!;
             final equipoLocalId = data['equipoLocalId'] as String?;
@@ -226,12 +258,13 @@ class _CambiosScreenState extends State<CambiosScreen> {
 
                                         final bool isDisabled = expulsado || tiene2Activa;
 
+                                        final baseColor = colorParaJugador(jugador);
                                         final avatarColor = isDisabled
-                                            ? colorScheme.primary.withOpacity(0.35)
-                                            : colorScheme.primary;
+                                            ? baseColor.withOpacity(0.35)
+                                            : baseColor;
                                         final textColor = isDisabled
-                                            ? colorScheme.onPrimary.withOpacity(0.5)
-                                            : colorScheme.onPrimary;
+                                            ? textoPara(baseColor).withOpacity(0.6)
+                                            : textoPara(baseColor);
 
                                         return InkWell(
                                           onTap: isDisabled
