@@ -4,9 +4,9 @@ Future<void> registrarEstadisticasDesdeAccion(
   String categoria,
   String partidoId,
   String equipoIdPrincipal,
-  int dorsalPrincipal,
+  int dorsalPrincipal, {
   String? equipoIdSecundario,
-  int? dorsalSecundario, {
+  int? dorsalSecundario,
   required String periodoActual,
   required int segundoActual,
   required String zonaDeJuego,
