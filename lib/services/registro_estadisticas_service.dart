@@ -1,90 +1,93 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 
-Future<void> registrarEstadisticasDesdeAccion(
-  String categoria,
-  String partidoId,
-  String equipoIdPrincipal,
-  int dorsalPrincipal, {
+/// Acciones que consideramos "sanciones" y que deben ir a la subcolección
+/// `Sanciones` en lugar de `Estadisticas`.
+const _accionesSancion = {
+  '2 minutos',
+  '2 minutos Provocado',
+  'Tarjeta Amarilla',
+  'Tarjeta Amarilla Provocado',
+  'Tarjeta Roja',
+  'Tarjeta Roja Provocado',
+  'Tarjeta Azul',
+  'Tarjeta Azul Provocado',
+  'Amarilla',
+  'Roja',
+  'Azul',
+};
+
+/// Registra una acción de partido en Firestore.
+///
+/// - Si la acción es sanción (2', amarilla, roja, azul…) se guarda en
+///   `ActaPartido/{actaPartidoId}/Sanciones`.
+/// - El resto se guarda en `ActaPartido/{actaPartidoId}/Estadisticas`.
+///
+/// Parámetros obligatorios:
+///   [actaPartidoId]  -> id del documento en `ActaPartido`
+///   [equipoId]       -> id del equipo que realiza la acción
+///   [dorsal]         -> dorsal del jugador principal
+///   [categoria]      -> id de la categoría (Gol, Perdida, Gol Contra, …)
+///   [accion]         -> nombre de la acción concreta (Gol, Gol Encajado, …)
+///   [periodoActual]  -> "1º Tiempo", "2º Tiempo", "Prórroga", …
+///   [segundoPartido] -> segundo exacto del partido (cuenta global)
+///
+/// Parámetros opcionales:
+///   [zonaJuego]        -> zona del campo (L6D, C6C, 7M, …)
+///   [zonaPorteria]     -> zona de portería (1A, 1B, …) sólo si aplica
+///   [equipoIdSecundario], [dorsalSecundario] -> para asistencias, golpes prov.
+Future<void> registrarAccionPartido({
+  required String actaPartidoId,
+  required String equipoId,
+  required int dorsal,
+  required String categoria,
+  required String accion,
+  required String periodoActual,
+  required int segundoPartido,
+  String? zonaJuego,
+  String? zonaPorteria,
   String? equipoIdSecundario,
   int? dorsalSecundario,
-  required String periodoActual,
-  required int segundoActual,
-  required String zonaDeJuego,
-  String? zonaPorteria,
 }) async {
+  final now = DateTime.now();
   final firestore = FirebaseFirestore.instance;
-  final accionSnap =
-      await firestore.collection('AccionEstadistica').doc(categoria).get();
 
-  final data = accionSnap.data();
-  final textoPrincipal =
-      data != null && data['EstadisticaDorsalPrincipal'] is String
-          ? data['EstadisticaDorsalPrincipal'] as String
-          : categoria;
-  final textoSecundario =
-      data != null && data['EstadisticaDorsalSecundario'] is String
-          ? data['EstadisticaDorsalSecundario'] as String
-          : categoria;
+  // Construimos el payload común a todas las acciones
+  final Map<String, dynamic> data = {
+    'equipoId': equipoId,
+    'dorsal': dorsal,
+    'categoria': categoria,
+    'accion': accion,
+    'periodo': periodoActual,
+    'segundoPartido': segundoPartido,
+    'timestamp': Timestamp.fromDate(now),
+  };
 
-  final statsRef = firestore
+  // Zona de juego / portería (solo se añaden si tienen valor)
+  if (zonaJuego != null && zonaJuego.isNotEmpty) {
+    data['zona'] = zonaJuego;
+    data['zonaJuego'] = zonaJuego;
+  }
+  if (zonaPorteria != null && zonaPorteria.isNotEmpty) {
+    data['zonaPorteria'] = zonaPorteria;
+  }
+
+  // Dorsal secundario (asistencias, golpes provocados, etc.)
+  if (equipoIdSecundario != null && equipoIdSecundario.isNotEmpty) {
+    data['equipoIdSecundario'] = equipoIdSecundario;
+  }
+  if (dorsalSecundario != null) {
+    data['dorsalSecundario'] = dorsalSecundario;
+  }
+
+  // Elegimos colección según sea sanción o acción de juego
+  final String subcoleccion =
+      _accionesSancion.contains(accion) || _accionesSancion.contains(categoria)
+          ? 'Sanciones'
+          : 'Estadisticas';
+
+  await firestore
       .collection('ActaPartido')
-      .doc(partidoId)
-      .collection('Estadisticas');
-
-  final registrarSecundario = equipoIdSecundario != null &&
-      dorsalSecundario != null &&
-      equipoIdSecundario != equipoIdPrincipal;
-
-  final batch = firestore.batch();
-
-  void addStat({
-    required String equipoId,
-    required int dorsal,
-    required String accion,
-  }) {
-    final docRef = statsRef.doc();
-    final data = <String, dynamic>{
-      'accion': accion,
-      'categoria': categoria,
-      'equipoId': equipoId,
-      'dorsal': dorsal,
-      'timestamp': FieldValue.serverTimestamp(),
-      'periodo': periodoActual,
-      'segundoPartido': segundoActual,
-      'zonaJuego': zonaDeJuego,
-      'zona': zonaDeJuego,
-    };
-
-    if (zonaPorteria != null) {
-      data['zonaPorteria'] = zonaPorteria;
-    }
-
-    batch.set(docRef, data);
-  }
-
-  addStat(
-    equipoId: equipoIdPrincipal,
-    dorsal: dorsalPrincipal,
-    accion: textoPrincipal,
-  );
-
-  // Log principal stat creation
-  // ignore: avoid_print
-  print(
-      'Estadística principal -> categoría: $categoria, accion: $textoPrincipal, dorsal: $dorsalPrincipal, equipoId: $equipoIdPrincipal, zonaJuego: $zonaDeJuego, zonaPorteria: $zonaPorteria');
-
-  if (registrarSecundario) {
-    addStat(
-      equipoId: equipoIdSecundario!,
-      dorsal: dorsalSecundario!,
-      accion: textoSecundario,
-    );
-
-    // Log secondary stat creation
-    // ignore: avoid_print
-    print(
-        'Estadística secundaria -> categoría: $categoria, accion: $textoSecundario, dorsal: $dorsalSecundario, equipoId: $equipoIdSecundario, zonaJuego: $zonaDeJuego, zonaPorteria: $zonaPorteria');
-  }
-
-  await batch.commit();
+      .doc(actaPartidoId)
+      .collection(subcoleccion)
+      .add(data);
 }
