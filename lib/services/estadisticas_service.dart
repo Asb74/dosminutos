@@ -276,6 +276,8 @@ Future<PartidoStats> calcularEstadisticasPartidoDesdeSnapshots({
 
     if (equipoId == null || dorsal == null || categoria == null) continue;
 
+    if ((accionRaw ?? '').toLowerCase().contains('provoc')) continue;
+
     // Resolvemos la ACCIÓN REAL de la jugada
     String nombreAccion = accionRaw?.trim() ?? '';
     if (nombreAccion.isEmpty) {
@@ -414,29 +416,27 @@ Future<PartidoStats> calcularEstadisticasPartidoDesdeSnapshots({
 
     if (equipoId == null || dorsal == null || accion == null) continue;
 
+    if (accion.toLowerCase().contains('provoc')) continue;
+
     final jugador = obtenerStatsJugador(equipoId, dorsal);
 
     switch (accion) {
       case '2 minutos':
-      case '2 minutos Provocado':
         jugador.exclusiones2m++;
         incrementarContador(jugador, '2 minutos');
         break;
       case 'Tarjeta Amarilla':
       case 'Amarilla':
-      case 'Tarjeta Amarilla Provocado':
         jugador.amarillas++;
         incrementarContador(jugador, 'Tarjeta Amarilla');
         break;
       case 'Tarjeta Roja':
       case 'Roja':
-      case 'Tarjeta Roja Provocado':
         jugador.rojas++;
         incrementarContador(jugador, 'Tarjeta Roja');
         break;
       case 'Tarjeta Azul':
       case 'Azul':
-      case 'Tarjeta Azul Provocado':
         jugador.azules++;
         incrementarContador(jugador, 'Tarjeta Azul');
         break;
