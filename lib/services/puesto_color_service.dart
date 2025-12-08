@@ -43,12 +43,15 @@ Future<Map<String, Color>> cargarMapaColoresPuesto({bool forceRefresh = false}) 
     final mapa = <String, Color>{};
     for (final doc in snapshot.docs) {
       final data = doc.data();
-      final puesto = data['puesto'] as String?;
+      final puestoRaw = data['puesto'] as String?;
       final colorHex = data['colorHex'] as String?;
+      final puesto = puestoRaw?.trim().toLowerCase();
+
       if (puesto == null || puesto.isEmpty) continue;
       try {
-        final color =
-            colorHex == null ? Colors.grey : colorFromHex(colorHex.trim());
+        final color = colorHex == null
+            ? Colors.grey
+            : colorFromHex(colorHex.trim());
         mapa[puesto] = color;
       } catch (_) {
         mapa[puesto] = Colors.grey;
@@ -66,3 +69,23 @@ void limpiarCacheColoresPuesto() {
   _mapaColoresCache = null;
   _mapaColoresFuture = null;
 }
+
+Color obtenerColorParaPuestoSync(String? puesto) {
+  final puestoNormalizado = puesto?.trim().toLowerCase();
+  if (puestoNormalizado == null || puestoNormalizado.isEmpty) {
+    return Colors.grey;
+  }
+
+  return _mapaColoresCache?[puestoNormalizado] ?? Colors.grey;
+}
+
+Color obtenerColorParaJugadorSync(Map<String, dynamic> jugadorData) {
+  final puesto = jugadorData['posicionAtaque'] as String?;
+  return obtenerColorParaPuestoSync(puesto);
+}
+
+// Ejemplo de uso:
+// CircleAvatar(
+//   backgroundColor: obtenerColorParaJugadorSync(jugadorData),
+//   child: Text(jugadorData['dorsal'].toString()),
+// )
