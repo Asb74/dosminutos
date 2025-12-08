@@ -720,11 +720,13 @@ class _EquipoStatsTabState extends State<_EquipoStatsTab>
                                 _contadorJugador(p, 'Tarjeta Amarilla');
                             final rojas = _contadorJugador(p, 'Tarjeta Roja');
                             final azules = _contadorJugador(p, 'Tarjeta Azul');
-                            final paradas = _contadorJugador(p, 'Parada');
-                            final golesEncajados =
-                                _contadorJugador(p, 'Gol Encajado');
+                              final paradas = _contadorJugador(p, 'Parada');
+                              final golesEncajados =
+                                  _contadorJugador(p, 'Gol Encajado');
 
-                            final chips = <Widget>[
+                              final esPortero = p.esPortero;
+
+                              final chips = <Widget>[
                               _StatChip(
                                 label: 'Tiempo',
                                 value: formatTiempo(segundosJugados),
